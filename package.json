@@ -19,10 +19,11 @@
     "register:commands": "bun src/register-commands.ts"
   },
   "dependencies": {
-    "@discordjs/voice": "0.18.0",
+    "@discordjs/voice": "0.19.2",
     "@opencode-ai/sdk": "1.14.19",
     "discord.js": "14.26.3",
     "dotenv": "17.4.2",
+    "openai": "^6.34.0",
     "opusscript": "0.0.8",
     "pino": "10.3.1",
     "undici": "6.25.0",
