@@ -417,8 +417,12 @@ function createTransportFailure(
   timedOut: boolean
 ): AsrTranscriptionError {
   const normalizedError = toError(error);
+  const isTimeoutError =
+    timedOut ||
+    normalizedError.name === 'TimeoutError' ||
+    normalizedError.name === 'APIConnectionTimeoutError';
 
-  if (timedOut || normalizedError.name === 'TimeoutError') {
+  if (isTimeoutError) {
     return new AsrTranscriptionError({
       code: 'ASR_TIMEOUT',
       message: `ASR request timed out after ${timeoutMs}ms`,

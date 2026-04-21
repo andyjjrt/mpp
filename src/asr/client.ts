@@ -1,5 +1,9 @@
-import { File, FormData, Headers, fetch } from 'undici';
-import type { Dispatcher, HeadersInit, Response } from 'undici';
+import OpenAI, { APIError } from 'openai';
+import { File, Headers } from 'undici';
+import type { Dispatcher, HeadersInit } from 'undici';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger({ module: 'asr:client' });
 
 export const DEFAULT_ASR_ENDPOINT_PATH = '/audio/transcriptions';
 export const DEFAULT_WAV_FILENAME = 'audio.wav';
@@ -72,11 +76,11 @@ function normalizeOptionalApiKey(value?: string): string | undefined {
   return normalizedValue.length === 0 ? undefined : normalizedValue;
 }
 
-function mergeHeaders(
-  defaultHeaders?: HeadersInit,
-  requestHeaders?: HeadersInit,
-  apiKey?: string
-): Headers {
+function createOpenAiApiKey(value?: string): string {
+  return normalizeOptionalApiKey(value) ?? 'EMPTY';
+}
+
+function mergeHeaders(defaultHeaders?: HeadersInit, requestHeaders?: HeadersInit): Headers {
   const headers = new Headers(defaultHeaders);
 
   if (requestHeaders !== undefined) {
@@ -89,15 +93,7 @@ function mergeHeaders(
     headers.set('accept', 'application/json');
   }
 
-  if (apiKey !== undefined && !headers.has('authorization')) {
-    headers.set('authorization', `Bearer ${apiKey}`);
-  }
-
   return headers;
-}
-
-function resolveUrl(baseUrl: string, path: string): URL {
-  return new URL(path.replace(/^\/+/, ''), `${baseUrl}/`);
 }
 
 function readOptionalString(value: string | undefined): string | undefined {
@@ -109,70 +105,134 @@ function readOptionalString(value: string | undefined): string | undefined {
   return normalizedValue.length === 0 ? undefined : normalizedValue;
 }
 
-function buildMultipartBody(
-  model: string,
-  audio: Uint8Array,
-  options: AsrClientRequestOptions = {}
-): FormData {
-  const formData = new FormData();
+function buildAudioFile(audio: Uint8Array, options: AsrClientRequestOptions = {}): File {
   const filename = readOptionalString(options.filename) ?? DEFAULT_WAV_FILENAME;
   const contentType = readOptionalString(options.contentType) ?? DEFAULT_WAV_CONTENT_TYPE;
+  const file = new File([audio], filename, { type: contentType });
 
-  formData.set('model', model);
-  formData.set('file', new File([audio], filename, { type: contentType }));
+  logger.debug(
+    {
+      filename,
+      contentType,
+      audioBytes: audio.byteLength,
+    },
+    'Building ASR request file'
+  );
 
-  return formData;
+  return file;
 }
 
-async function readResponseBody(response: Response): Promise<unknown> {
-  if (response.status === 204) {
+function headersToObject(headers: Headers): Record<string, string> {
+  return Object.fromEntries(headers.entries());
+}
+
+function createFetchOptions(dispatcher?: Dispatcher): Record<string, unknown> | undefined {
+  if (dispatcher === undefined) {
     return undefined;
   }
 
-  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
-  const text = await response.text();
+  return { dispatcher };
+}
 
-  if (text.length === 0) {
-    return undefined;
+function buildErrorResponse(error: APIError): AsrClientResponse | null {
+  if (error.status === undefined) {
+    return null;
   }
 
-  if (contentType.includes('application/json') || contentType.includes('+json')) {
-    try {
-      return JSON.parse(text) as unknown;
-    } catch {
-      return text;
-    }
-  }
-
-  return text;
+  return {
+    ok: false,
+    statusCode: error.status,
+    statusText: error.message,
+    headers: new Headers(error.headers),
+    raw: error.error ?? { message: error.message },
+  };
 }
 
 export function createAsrClient(config: AsrClientConfig): AsrClient {
   const baseUrl = normalizeBaseUrl(config.baseUrl);
   const model = requireNonEmptyString('model', config.model);
   const endpointPath = normalizeEndpointPath(config.endpointPath ?? DEFAULT_ASR_ENDPOINT_PATH);
-  const apiKey = normalizeOptionalApiKey(config.apiKey);
+  const openai = new OpenAI({
+    apiKey: createOpenAiApiKey(config.apiKey),
+    baseURL: baseUrl,
+    defaultHeaders: config.headers,
+    fetchOptions: createFetchOptions(config.dispatcher),
+    maxRetries: 0,
+  });
 
   return {
     baseUrl,
     model,
     endpointPath,
     async requestWavTranscription(audio, options = {}) {
-      const response = await fetch(resolveUrl(baseUrl, endpointPath), {
-        method: 'POST',
-        headers: mergeHeaders(config.headers, options.headers, apiKey),
-        body: buildMultipartBody(model, audio, options),
-        signal: options.signal,
-        dispatcher: config.dispatcher,
-      });
+      const headers = mergeHeaders(config.headers, options.headers);
+      const file = buildAudioFile(audio, options);
+      const requestOptions: NonNullable<Parameters<typeof openai.audio.transcriptions.create>[1]> =
+        {
+          headers: headersToObject(headers),
+          signal: options.signal,
+        };
 
-      return {
-        ok: response.ok,
-        statusCode: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-        raw: await readResponseBody(response),
-      };
+      logger.debug(
+        {
+          baseUrl,
+          endpointPath,
+          headers: headersToObject(headers),
+          audioBytes: audio.byteLength,
+          model,
+        },
+        'Sending ASR request'
+      );
+
+      try {
+        const { data, response } = await openai.audio.transcriptions
+          .create(
+            {
+              model,
+              file,
+            },
+            requestOptions
+          )
+          .withResponse();
+
+        logger.debug(
+          {
+            statusCode: response.status,
+            statusText: response.statusText,
+            ok: response.ok,
+            raw: data,
+          },
+          'Received ASR response'
+        );
+
+        return {
+          ok: response.ok,
+          statusCode: response.status,
+          statusText: response.statusText,
+          headers: new Headers(response.headers),
+          raw: data,
+        };
+      } catch (error) {
+        if (error instanceof APIError) {
+          const response = buildErrorResponse(error);
+
+          if (response !== null) {
+            logger.debug(
+              {
+                statusCode: response.statusCode,
+                statusText: response.statusText,
+                ok: response.ok,
+                raw: response.raw,
+              },
+              'Received ASR error response'
+            );
+
+            return response;
+          }
+        }
+
+        throw error;
+      }
     },
   };
 }
