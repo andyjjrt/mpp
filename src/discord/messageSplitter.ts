@@ -79,12 +79,18 @@ function resolveOpenFence(source: string, initialFence: string | null): string |
   return openFence;
 }
 
-function splitChunk(source: string, maxLength: number, initialFence: string | null): SplitChunkResult {
+function splitChunk(
+  source: string,
+  maxLength: number,
+  initialFence: string | null
+): SplitChunkResult {
   const prefix = initialFence === null ? '' : `${initialFence}\n`;
   let contentBudget = maxLength - prefix.length;
 
   if (contentBudget <= 0) {
-    throw new Error(`Discord message limit ${maxLength} is too small to preserve the current code fence state.`);
+    throw new Error(
+      `Discord message limit ${maxLength} is too small to preserve the current code fence state.`
+    );
   }
 
   let splitIndex = selectSplitIndex(source, contentBudget);
@@ -96,7 +102,9 @@ function splitChunk(source: string, maxLength: number, initialFence: string | nu
     contentBudget -= suffix.length;
 
     if (contentBudget <= 0) {
-      throw new Error(`Discord message limit ${maxLength} is too small to preserve balanced code fences.`);
+      throw new Error(
+        `Discord message limit ${maxLength} is too small to preserve balanced code fences.`
+      );
     }
 
     splitIndex = selectSplitIndex(source, contentBudget);
@@ -112,7 +120,10 @@ function splitChunk(source: string, maxLength: number, initialFence: string | nu
   };
 }
 
-export function splitDiscordMessage(content: string, maxLength: number = DISCORD_MESSAGE_LIMIT): string[] {
+export function splitDiscordMessage(
+  content: string,
+  maxLength: number = DISCORD_MESSAGE_LIMIT
+): string[] {
   if (maxLength <= 0) {
     throw new Error('Discord message limit must be greater than zero.');
   }

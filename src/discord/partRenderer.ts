@@ -1,6 +1,7 @@
 import type {
   AssistantErrorPart,
   AssistantOutputPart,
+  AssistantPatchPart,
   AssistantReasoningPart,
   AssistantTextPart,
   AssistantToolCallPart,
@@ -8,7 +9,14 @@ import type {
   AssistantUnknownPart,
 } from '../opencode/parts';
 
-export type RenderedDiscordPartKind = 'text' | 'reasoning' | 'tool_call' | 'tool_result' | 'error' | 'unknown';
+export type RenderedDiscordPartKind =
+  | 'text'
+  | 'reasoning'
+  | 'tool_call'
+  | 'tool_result'
+  | 'error'
+  | 'unknown'
+  | 'patch';
 
 export interface RenderedDiscordPart {
   id: string;
@@ -17,10 +25,8 @@ export interface RenderedDiscordPart {
   content: string;
 }
 
-const EMPTY_TEXT_FALLBACK = '_(assistant text output was empty)_';
 const EMPTY_REASONING_FALLBACK = '_(assistant reasoning output was empty)_';
-const EMPTY_TOOL_CALL_FALLBACK = '_(assistant emitted a tool call with no visible details)_';
-const EMPTY_TOOL_RESULT_FALLBACK = '_(tool execution finished without visible output)_';
+
 const EMPTY_ERROR_FALLBACK = '_(assistant reported an error without a message)_';
 const UNKNOWN_PART_FALLBACK = 'Received an unsupported assistant output part.';
 
@@ -58,60 +64,72 @@ function createRenderedDiscordPart(
   part: Pick<AssistantOutputPart, 'id' | 'type'>,
   label: string,
   body: string,
-  emptyFallback: string,
+  emptyFallback: string
 ): RenderedDiscordPart {
   const normalizedBody = hasVisibleText(body) ? body : emptyFallback;
 
   return {
     id: part.id,
-    kind: part.type,
+    kind: part.type as RenderedDiscordPartKind,
     label,
     content: `**${label}**\n${normalizedBody}`,
   };
 }
 
-function renderTextPart(part: AssistantTextPart): RenderedDiscordPart {
-  return createRenderedDiscordPart(part, 'Assistant', part.text, EMPTY_TEXT_FALLBACK);
+function renderTextPart(part: AssistantTextPart): RenderedDiscordPart | null {
+  // Skip ignored or empty text parts
+  if (part.ignored || !hasVisibleText(part.text)) {
+    return null;
+  }
+
+  // Return plain text without "Assistant" label
+  return {
+    id: part.id,
+    kind: 'text',
+    label: 'Assistant',
+    content: part.text,
+  };
 }
 
 function renderReasoningPart(part: AssistantReasoningPart): RenderedDiscordPart {
-  return createRenderedDiscordPart(part, 'Reasoning', part.text, EMPTY_REASONING_FALLBACK);
+  const text = hasVisibleText(part.text) ? part.text : EMPTY_REASONING_FALLBACK;
+  // Format as blockquote: prepend > to each line
+  const quotedText = text
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+  return {
+    id: part.id,
+    kind: 'reasoning',
+    label: 'Reasoning',
+    content: quotedText,
+  };
 }
 
 function renderToolCallPart(part: AssistantToolCallPart): RenderedDiscordPart {
-  const lines = [`Tool: ${part.tool}`, `Status: ${part.status}`];
-
-  if (hasVisibleText(part.callId)) {
-    lines.push(`Call ID: ${part.callId}`);
-  }
-
-  if (hasVisibleText(part.title)) {
-    lines.push(`Title: ${part.title}`);
-  }
-
-  lines.push(`Input:\n${renderValue(part.input, '_(tool call input was empty)_')}`);
-
-  return createRenderedDiscordPart(part, 'Tool call', lines.join('\n'), EMPTY_TOOL_CALL_FALLBACK);
+  const timestamp = part.startTime ? ` (<t:${Math.floor(part.startTime / 1000)}:R>)` : '';
+  const content = `> :wrench: **${part.tool}** ${part.title ?? ''}${timestamp}`;
+  return {
+    id: part.id,
+    kind: 'tool_call',
+    label: 'Tool call',
+    content,
+  };
 }
 
-function renderToolResultPart(part: AssistantToolResultPart): RenderedDiscordPart {
-  const lines = [`Tool: ${part.tool}`];
-
-  if (hasVisibleText(part.callId)) {
-    lines.push(`Call ID: ${part.callId}`);
+function renderToolResultPart(part: AssistantToolResultPart): RenderedDiscordPart | null {
+  // Skip tool results with no visible output
+  if (!hasVisibleText(part.output)) {
+    return null;
   }
 
-  if (hasVisibleText(part.title)) {
-    lines.push(`Title: ${part.title}`);
-  }
-
-  lines.push(`Result:\n${renderValue(part.output, EMPTY_TOOL_RESULT_FALLBACK)}`);
-
-  if (part.attachments.length > 0) {
-    lines.push(`Attachments: ${part.attachments.length}`);
-  }
-
-  return createRenderedDiscordPart(part, 'Tool result', lines.join('\n'), EMPTY_TOOL_RESULT_FALLBACK);
+  // Just show the output directly without metadata
+  return {
+    id: part.id,
+    kind: 'tool_result',
+    label: 'Tool result',
+    content: part.output,
+  };
 }
 
 function renderErrorPart(part: AssistantErrorPart): RenderedDiscordPart {
@@ -147,10 +165,26 @@ function renderUnknownPart(part: AssistantUnknownPart): RenderedDiscordPart {
     lines.push(part.summary.trim());
   }
 
-  return createRenderedDiscordPart(part, 'Unsupported assistant output', lines.join('\n'), UNKNOWN_PART_FALLBACK);
+  return createRenderedDiscordPart(
+    part,
+    'Unsupported assistant output',
+    lines.join('\n'),
+    UNKNOWN_PART_FALLBACK
+  );
 }
 
-export function renderAssistantPart(part: AssistantOutputPart): RenderedDiscordPart {
+function renderPatchPart(part: AssistantPatchPart): RenderedDiscordPart {
+  const fileList = part.files.join(', ');
+  const content = `> :pencil: ${fileList}`;
+  return {
+    id: part.id,
+    kind: 'patch' as RenderedDiscordPartKind,
+    label: 'Patch',
+    content,
+  };
+}
+
+export function renderAssistantPart(part: AssistantOutputPart): RenderedDiscordPart | null {
   switch (part.type) {
     case 'text':
       return renderTextPart(part);
@@ -162,7 +196,12 @@ export function renderAssistantPart(part: AssistantOutputPart): RenderedDiscordP
       return renderToolResultPart(part);
     case 'error':
       return renderErrorPart(part);
+    case 'patch':
+      return renderPatchPart(part);
     case 'unknown':
       return renderUnknownPart(part);
+    case 'step_start':
+    case 'step_finish':
+      return null;
   }
 }
