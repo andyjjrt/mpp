@@ -1,5 +1,6 @@
 import type {
   Event as OpencodeEvent,
+  EventMessageUpdated,
   EventMessagePartUpdated,
   EventSessionError,
   EventSessionIdle,
@@ -13,13 +14,17 @@ export type OpenCodeEventType = OpenCodeEvent['type'];
 
 export function isOpenCodeEventType<Type extends OpenCodeEventType>(
   event: OpenCodeEvent,
-  type: Type,
+  type: Type
 ): event is Extract<OpenCodeEvent, { type: Type }> {
   return event.type === type;
 }
 
 export function isMessagePartUpdatedEvent(event: OpenCodeEvent): event is EventMessagePartUpdated {
   return isOpenCodeEventType(event, 'message.part.updated');
+}
+
+export function isMessageUpdatedEvent(event: OpenCodeEvent): event is EventMessageUpdated {
+  return isOpenCodeEventType(event, 'message.updated');
 }
 
 export function isSessionStatusEvent(event: OpenCodeEvent): event is EventSessionStatus {
@@ -34,10 +39,58 @@ export function isSessionErrorEvent(event: OpenCodeEvent): event is EventSession
   return isOpenCodeEventType(event, 'session.error');
 }
 
-export async function subscribeToOpencodeEvents(context: OpencodeSdkContext): Promise<AsyncGenerator<OpenCodeEvent>> {
-  const subscription = await context.client.event.subscribe({
-    throwOnError: true,
-  });
+export function getOpenCodeEventSessionId(event: OpenCodeEvent): string | undefined {
+  if (isMessagePartUpdatedEvent(event)) {
+    return event.properties.part.sessionID;
+  }
 
-  return subscription.stream;
+  if (isMessageUpdatedEvent(event)) {
+    return event.properties.info.sessionID;
+  }
+
+  if (event.type.startsWith('session.')) {
+    const sessionId = (event.properties as { sessionID?: string }).sessionID;
+
+    if (typeof sessionId === 'string') {
+      return sessionId;
+    }
+  }
+
+  return undefined;
+}
+
+export function isOpenCodeEventForSession(event: OpenCodeEvent, sessionId: string): boolean {
+  return getOpenCodeEventSessionId(event) === sessionId;
+}
+
+export interface OpenCodeEventSubscription {
+  stream: AsyncGenerator<OpenCodeEvent>;
+  close(): void | Promise<void>;
+}
+
+type SdkOpenCodeEventSubscription = {
+  stream: AsyncGenerator<OpenCodeEvent>;
+  close?: () => void | Promise<void>;
+};
+
+export async function subscribeToOpencodeEvents(
+  context: OpencodeSdkContext
+): Promise<OpenCodeEventSubscription> {
+  const subscription = (await context.client.event.subscribe({
+    throwOnError: true,
+  })) as SdkOpenCodeEventSubscription;
+
+  return {
+    stream: subscription.stream,
+    async close(): Promise<void> {
+      if (typeof subscription.close === 'function') {
+        await subscription.close();
+        return;
+      }
+
+      if (typeof subscription.stream.return === 'function') {
+        await subscription.stream.return(undefined);
+      }
+    },
+  };
 }

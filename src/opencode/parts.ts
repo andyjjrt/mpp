@@ -33,6 +33,7 @@ export interface AssistantToolCallPart extends AssistantPartBase {
   callId: string;
   tool: string;
   status: 'pending' | 'running';
+  startTime?: number;
   input: Record<string, unknown>;
   rawInput: string;
   title?: string;
@@ -46,6 +47,8 @@ export interface AssistantToolResultPart extends AssistantPartBase {
   input: Record<string, unknown>;
   output: string;
   title: string;
+  startTime: number;
+  endTime: number;
   metadata: Record<string, unknown>;
   attachments: readonly FilePart[];
 }
@@ -69,13 +72,35 @@ export interface AssistantUnknownPart extends AssistantPartBase {
   raw: OpencodePart;
 }
 
+export interface AssistantStepStartPart extends AssistantPartBase {
+  type: 'step_start';
+  stepType: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AssistantStepFinishPart extends AssistantPartBase {
+  type: 'step_finish';
+  stepType: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AssistantPatchPart extends AssistantPartBase {
+  type: 'patch';
+  hash: string;
+  files: readonly string[];
+  metadata?: Record<string, unknown>;
+}
+
 export type AssistantOutputPart =
   | AssistantTextPart
   | AssistantReasoningPart
   | AssistantToolCallPart
   | AssistantToolResultPart
   | AssistantErrorPart
-  | AssistantUnknownPart;
+  | AssistantUnknownPart
+  | AssistantStepStartPart
+  | AssistantPatchPart
+  | AssistantStepFinishPart;
 
 type AssistantMessageError = NonNullable<AssistantMessage['error']>;
 
@@ -93,7 +118,9 @@ function toRecord(value: Record<string, unknown> | undefined): Record<string, un
   return value === undefined ? undefined : { ...value };
 }
 
-function createPartBase(part: Pick<OpencodePart, 'id' | 'sessionID' | 'messageID'>): AssistantPartBase {
+function createPartBase(
+  part: Pick<OpencodePart, 'id' | 'sessionID' | 'messageID'>
+): AssistantPartBase {
   return {
     id: part.id,
     sessionId: part.sessionID,
@@ -111,7 +138,9 @@ function createUnknownPart(part: OpencodePart, summary: string): AssistantUnknow
   };
 }
 
-function normalizeToolPart(part: ToolPart): AssistantToolCallPart | AssistantToolResultPart | AssistantErrorPart {
+function normalizeToolPart(
+  part: ToolPart
+): AssistantToolCallPart | AssistantToolResultPart | AssistantErrorPart {
   const base = createPartBase(part);
   const input = { ...part.state.input };
 
@@ -138,6 +167,7 @@ function normalizeToolPart(part: ToolPart): AssistantToolCallPart | AssistantToo
         input,
         rawInput: JSON.stringify(part.state.input),
         title: part.state.title,
+        startTime: part.state.time.start,
         metadata: toRecord(part.state.metadata) ?? toRecord(part.metadata),
       };
 
@@ -150,6 +180,8 @@ function normalizeToolPart(part: ToolPart): AssistantToolCallPart | AssistantToo
         input,
         output: part.state.output,
         title: part.state.title,
+        startTime: part.state.time.start,
+        endTime: part.state.time.end,
         metadata: { ...part.state.metadata },
         attachments: [...(part.state.attachments ?? [])],
       };
@@ -213,13 +245,56 @@ export function normalizeAssistantPart(part: OpencodePart): AssistantOutputPart 
       return normalizeToolPart(part);
 
     case 'subtask':
-      return createUnknownPart(part, `Unsupported assistant part type "${part.type}" from agent "${part.agent}"`);
+      return createUnknownPart(
+        part,
+        `Unsupported assistant part type "${part.type}" from agent "${part.agent}"`
+      );
 
+    case 'step-start': {
+      const stepStartPart = part as unknown as Record<string, unknown>;
+      return {
+        ...createPartBase(part),
+        type: 'step_start' as const,
+        stepType: typeof stepStartPart.stepType === 'string' ? stepStartPart.stepType : 'unknown',
+        metadata: toRecord(
+          typeof stepStartPart.metadata === 'object' && stepStartPart.metadata !== null
+            ? (stepStartPart.metadata as Record<string, unknown>)
+            : undefined
+        ),
+      };
+    }
+
+    case 'step-finish': {
+      const stepFinishPart = part as unknown as Record<string, unknown>;
+      return {
+        ...createPartBase(part),
+        type: 'step_finish' as const,
+        stepType: typeof stepFinishPart.stepType === 'string' ? stepFinishPart.stepType : 'unknown',
+        metadata: toRecord(
+          typeof stepFinishPart.metadata === 'object' && stepFinishPart.metadata !== null
+            ? (stepFinishPart.metadata as Record<string, unknown>)
+            : undefined
+        ),
+      };
+    }
     case 'file':
-    case 'step-start':
-    case 'step-finish':
     case 'snapshot':
-    case 'patch':
+      return createUnknownPart(part, `Unsupported assistant part type "${part.type}"`);
+
+    case 'patch': {
+      const patchPart = part as unknown as {
+        hash: string;
+        files: string[];
+        metadata?: Record<string, unknown>;
+      };
+      return {
+        ...createPartBase(part),
+        type: 'patch',
+        hash: patchPart.hash,
+        files: [...patchPart.files],
+        metadata: toRecord(patchPart.metadata),
+      };
+    }
     case 'agent':
     case 'retry':
     case 'compaction':
@@ -233,7 +308,7 @@ export function normalizeAssistantPart(part: OpencodePart): AssistantOutputPart 
 export function normalizeAssistantError(
   error: AssistantMessageError,
   messageId: string,
-  sessionId: string,
+  sessionId: string
 ): AssistantErrorPart {
   const message = error.data.message;
 
@@ -249,7 +324,9 @@ export function normalizeAssistantError(
   };
 }
 
-export function normalizeAssistantOutputParts(parts: readonly OpencodePart[]): AssistantOutputPart[] {
+export function normalizeAssistantOutputParts(
+  parts: readonly OpencodePart[]
+): AssistantOutputPart[] {
   return parts.map((part) => normalizeAssistantPart(part));
 }
 
