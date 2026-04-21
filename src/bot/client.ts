@@ -5,6 +5,10 @@ import type { OpencodeSdkContext } from '../opencode/sdk.js';
 import type { ThreadTaskQueue } from '../pipeline/enqueue.js';
 import type { ThreadSessionRepo } from '../storage/threadSessionRepo.js';
 import {
+  registerInteractionCreateHandler,
+  type RegisterInteractionCreateHandlerOptions,
+} from './events/interactionCreate.js';
+import {
   registerMessageCreateHandler,
   type RegisterMessageCreateHandlerOptions,
 } from './events/messageCreate.js';
@@ -23,6 +27,14 @@ export interface BotServices {
   threadTaskQueue: ThreadTaskQueue;
 }
 
+type InteractionCreateServices = RegisterInteractionCreateHandlerOptions['services'];
+
+function resolveInteractionCreateServices(services: BotServices): InteractionCreateServices {
+  return {
+    threadSessionRepo: services.threadSessionRepo,
+  };
+}
+
 export function createDiscordClient(config: AppConfig): Client {
   return new Client({
     intents: config.discord.requirements.gatewayIntents,
@@ -31,6 +43,9 @@ export function createDiscordClient(config: AppConfig): Client {
 }
 
 export function registerBotEventHandlers(client: Client, options: RegisterBotEventHandlersOptions): void {
+  registerInteractionCreateHandler(client, {
+    services: resolveInteractionCreateServices(options.services),
+  });
   registerMessageCreateHandler(client, {
     config: options.config,
     services: options.services,
