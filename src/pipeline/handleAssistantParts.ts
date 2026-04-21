@@ -33,6 +33,6 @@ export async function handleAssistantParts(options: HandleAssistantPartsOptions)
     return await sendAssistantReplies(options.thread, options.parts);
   } catch (error) {
     await sendDispatchFailureFallback(options.thread, error);
-    return [];
+    throw new RuntimeError(`Failed to dispatch assistant output: ${toError(error).message}`);
   }
 }
