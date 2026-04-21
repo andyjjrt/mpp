@@ -126,7 +126,7 @@ Voice input is captured per speaker, segmented into utterances, normalized to WA
 
 ### Deliver
 
-- `voice/receiver.ts`, `voice/segmenter.ts`, `voice/normalizer.ts`.
+- [x] `voice/receiver.ts`, `voice/segmenter.ts`, `voice/normalizer.ts`.
 - `asr/client.ts`, `asr/transcribe.ts`.
 
 ### Implementation Notes
