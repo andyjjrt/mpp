@@ -31,3 +31,6 @@ coverage/
 .vscode/
 *.swp
 *~
+
+.data
+.sisyphus
