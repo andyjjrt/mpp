@@ -9,6 +9,29 @@ const logger = createLogger({ module: 'register-commands' });
 const commands = [
   new SlashCommandBuilder().setName('join').setDescription('Ask the bot to join your current voice channel.'),
   new SlashCommandBuilder().setName('leave').setDescription('Ask the bot to leave its current voice channel.'),
+  new SlashCommandBuilder()
+    .setName('model')
+    .setDescription('Manage AI model settings for this thread')
+    .addSubcommand((sub) => sub.setName('list').setDescription('List available models'))
+    .addSubcommand((sub) =>
+      sub
+        .setName('set')
+        .setDescription('Set a custom model')
+        .addStringOption((opt) => opt.setName('provider').setDescription('Provider ID').setRequired(true))
+        .addStringOption((opt) => opt.setName('model').setDescription('Model ID').setRequired(true)),
+    )
+    .addSubcommand((sub) => sub.setName('clear').setDescription('Clear custom model setting')),
+  new SlashCommandBuilder()
+    .setName('agent')
+    .setDescription('Manage AI agent settings for this thread')
+    .addSubcommand((sub) => sub.setName('list').setDescription('List available agents'))
+    .addSubcommand((sub) =>
+      sub
+        .setName('set')
+        .setDescription('Set a custom agent')
+        .addStringOption((opt) => opt.setName('name').setDescription('Agent name').setRequired(true)),
+    )
+    .addSubcommand((sub) => sub.setName('clear').setDescription('Clear custom agent setting')),
 ].map((command) => command.toJSON());
 
 function resolveGuildId(guildId: string | undefined): string {
