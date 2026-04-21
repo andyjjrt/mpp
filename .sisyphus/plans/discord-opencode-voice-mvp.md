@@ -95,8 +95,8 @@ A main-channel mention creates an OpenCode session, creates a Discord thread, bi
 
 ### Deliver
 
-- `voice/runtime.ts` runtime map with guild, thread, session, voice-channel, connection, and recording state.
-- `voice/joinLeave.ts`.
+- [x] `voice/runtime.ts` runtime map with guild, thread, session, voice-channel, connection, and recording state.
+- [x] `voice/joinLeave.ts`.
 - `bot/commands/{join,leave}.ts` and `bot/events/interactionCreate.ts`.
 
 ### Implementation Notes
