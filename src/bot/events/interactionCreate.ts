@@ -1,5 +1,8 @@
 import { Events, type ChatInputCommandInteraction, type Client, type Interaction } from 'discord.js';
 
+import type { AppConfig } from '../../types.js';
+import type { OpencodeSdkContext } from '../../opencode/sdk.js';
+import type { ThreadTaskQueue } from '../../pipeline/enqueue.js';
 import type { ThreadSessionRepo } from '../../storage/threadSessionRepo.js';
 import { RuntimeError, toError } from '../../utils/errors.js';
 import { createLogger } from '../../utils/logger.js';
@@ -10,6 +13,9 @@ const logger = createLogger({ module: 'app' });
 
 interface InteractionCreateServices {
   threadSessionRepo: ThreadSessionRepo;
+  threadTaskQueue: ThreadTaskQueue;
+  opencodeContext: OpencodeSdkContext;
+  config: AppConfig;
 }
 
 export interface InteractionCommandResult {

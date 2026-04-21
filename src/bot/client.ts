@@ -10,18 +10,18 @@ import {
 } from './events/interactionCreate.js';
 import {
   registerMessageCreateHandler,
-  type RegisterMessageCreateHandlerOptions,
 } from './events/messageCreate.js';
 import { registerReadyHandler, type RegisterReadyHandlerOptions } from './events/ready.js';
 
 export interface RegisterBotEventHandlersOptions {
   config: AppConfig;
-  services: RegisterMessageCreateHandlerOptions['services'];
+  services: BotServices;
   startupStartedAt: RegisterReadyHandlerOptions['startupStartedAt'];
   threadSessionDatabasePath: RegisterReadyHandlerOptions['threadSessionDatabasePath'];
 }
 
 export interface BotServices {
+  config: AppConfig;
   opencodeContext: OpencodeSdkContext;
   threadSessionRepo: ThreadSessionRepo;
   threadTaskQueue: ThreadTaskQueue;
@@ -31,7 +31,10 @@ type InteractionCreateServices = RegisterInteractionCreateHandlerOptions['servic
 
 function resolveInteractionCreateServices(services: BotServices): InteractionCreateServices {
   return {
+    config: services.config,
+    opencodeContext: services.opencodeContext,
     threadSessionRepo: services.threadSessionRepo,
+    threadTaskQueue: services.threadTaskQueue,
   };
 }
 

@@ -2,9 +2,10 @@ import { joinVoiceChannel } from '@discordjs/voice';
 import type { VoiceBasedChannel } from 'discord.js';
 
 import { assertManagedSessionThread, type ManagedSessionThreadContext } from '../discord/threadGuards.js';
-import type { ThreadSessionRepo } from '../storage/threadSessionRepo.js';
 import { RuntimeError } from '../utils/errors.js';
+import { stopGuildVoiceReceiver } from './receiver.js';
 import { guildVoiceRuntimes } from './runtime.js';
+import type { ThreadSessionRepo } from '../storage/threadSessionRepo.js';
 
 export interface JoinGuildVoiceRuntimeDependencies {
   threadSessionRepo: ThreadSessionRepo;
@@ -78,7 +79,10 @@ function isVoiceBasedChannel(channel: unknown): channel is VoiceBasedChannel {
   );
 }
 
-async function resolveUserVoiceChannel(thread: ReturnType<typeof assertManagedSessionThread>, userId: string): Promise<VoiceBasedChannel> {
+async function resolveUserVoiceChannel(
+  thread: ReturnType<typeof assertManagedSessionThread>,
+  userId: string,
+): Promise<VoiceBasedChannel> {
   const voiceState = await thread.guild.voiceStates.fetch(requireUserId(userId));
   const voiceChannel = voiceState.channel;
 
@@ -147,6 +151,7 @@ export async function leaveGuildVoiceRuntime(
   let destroyError: RuntimeError | null = null;
 
   try {
+    stopGuildVoiceReceiver(thread.guild.id);
     runtime.connection.destroy();
   } catch {
     destroyError = new RuntimeError('Failed to leave the voice channel.');

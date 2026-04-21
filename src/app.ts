@@ -30,6 +30,7 @@ export async function start(): Promise<Client> {
   const client = createDiscordClient(config);
   const database = initializeDatabase(THREAD_SESSION_DATABASE_PATH);
   const services: BotServices = {
+    config,
     opencodeContext: createOpencodeSdkContext(config),
     threadSessionRepo: createThreadSessionRepo(database),
     threadTaskQueue: createThreadTaskQueue(),
