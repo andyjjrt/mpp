@@ -12,6 +12,8 @@
     "test": "bun test",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write",
+    "format:all": "prettier --write .",
     "start": "bun dist/app.js",
     "dev": "bun --watch src/app.ts",
     "register:commands": "bun src/register-commands.ts"
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "25.6.0",
+    "prettier": "3.5.3",
     "typescript": "6.0.3"
   }
 }
