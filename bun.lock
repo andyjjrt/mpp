@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "voicecode",
+      "name": "mouth-plus-plus",
       "dependencies": {
         "@discordjs/voice": "0.19.2",
         "@opencode-ai/sdk": "1.14.19",

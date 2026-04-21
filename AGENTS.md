@@ -1,4 +1,4 @@
-# Voicecode — Discord OpenCode Voice Bot
+# Mouth-plus-plus — Discord OpenCode Voice Bot
 
 Discord bot that bridges voice and text channels with OpenCode AI sessions. Mention the bot in a monitored channel to create a thread-bound OpenCode session, then use `/join` to add voice interaction.
 
