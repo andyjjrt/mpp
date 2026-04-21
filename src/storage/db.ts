@@ -30,7 +30,8 @@ const { Database: BunDatabase } = require('bun:sqlite') as {
   Database: new (filename: string) => BunSqliteDatabase;
 };
 
-const THREAD_SESSIONS_SCHEMA = "CREATE TABLE IF NOT EXISTS thread_sessions (thread_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, model_provider_id TEXT NULL, model_id TEXT NULL, agent_name TEXT NULL);";
+const THREAD_SESSIONS_SCHEMA =
+  'CREATE TABLE IF NOT EXISTS thread_sessions (thread_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, first_user_id TEXT NULL, model_provider_id TEXT NULL, model_id TEXT NULL, agent_name TEXT NULL);';
 
 function ensureDatabaseDirectory(databaseFilePath: string): void {
   if (databaseFilePath === ':memory:') {
@@ -50,22 +51,32 @@ function createThreadSessionsTable(database: ThreadSessionDatabase): void {
 }
 function migrateSchema(database: ThreadSessionDatabase): void {
   try {
+    database.exec('ALTER TABLE thread_sessions ADD COLUMN first_user_id TEXT NULL');
+  } catch {
+    /* ignore if already exists */
+  }
+  try {
     database.exec('ALTER TABLE thread_sessions ADD COLUMN model_provider_id TEXT NULL');
-  } catch { /* ignore if already exists */ }
+  } catch {
+    /* ignore if already exists */
+  }
   try {
     database.exec('ALTER TABLE thread_sessions ADD COLUMN model_id TEXT NULL');
-  } catch { /* ignore if already exists */ }
+  } catch {
+    /* ignore if already exists */
+  }
   try {
     database.exec('ALTER TABLE thread_sessions ADD COLUMN agent_name TEXT NULL');
-  } catch { /* ignore if already exists */ }
+  } catch {
+    /* ignore if already exists */
+  }
 }
-
 
 class BunThreadSessionDatabase implements ThreadSessionDatabase {
   public constructor(private readonly database: BunSqliteDatabase) {}
 
   public pragma(source: string): unknown {
-    this.database.exec("PRAGMA " + source);
+    this.database.exec('PRAGMA ' + source);
     return undefined;
   }
 
@@ -104,7 +115,10 @@ export function initializeDatabase(databaseFilePath: string): ThreadSessionDatab
     database?.close();
 
     throw new RuntimeError(
-      "Failed to initialize SQLite database at \"" + databaseFilePath + "\": " + toError(error).message,
+      'Failed to initialize SQLite database at "' +
+        databaseFilePath +
+        '": ' +
+        toError(error).message
     );
   }
 }

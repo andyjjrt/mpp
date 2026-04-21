@@ -7,6 +7,7 @@ interface ThreadSessionRow {
   model_provider_id: string | null;
   model_id: string | null;
   agent_name: string | null;
+  first_user_id: string | null;
 }
 
 export type ThreadModelPreference = { providerID: string; modelID: string };
@@ -19,9 +20,11 @@ export interface ThreadSessionRepo {
   findPromptPreferences(threadId: string): ThreadPromptPreferences;
   setModel(threadId: string, model: ThreadModelPreference | null): void;
   setAgent(threadId: string, agent: string | null): void;
+  setFirstUserId(threadId: string, userId: string): void;
+  findFirstUserId(threadId: string): string | null;
 }
 
-function requireIdentifier(name: 'threadId' | 'sessionId', value: string): string {
+function requireIdentifier(name: 'threadId' | 'sessionId' | 'userId', value: string): string {
   const normalizedValue = value.trim();
 
   if (normalizedValue.length === 0) {
@@ -35,22 +38,28 @@ export function createThreadSessionRepo(database: ThreadSessionDatabase): Thread
   const bindStatement = database.prepare(
     `INSERT INTO thread_sessions (thread_id, session_id)
      VALUES (?, ?)
-     ON CONFLICT(thread_id) DO UPDATE SET session_id = excluded.session_id`,
+     ON CONFLICT(thread_id) DO UPDATE SET session_id = excluded.session_id`
   );
   const findSessionIdStatement = database.prepare<ThreadSessionRow>(
-    'SELECT session_id FROM thread_sessions WHERE thread_id = ?',
+    'SELECT session_id FROM thread_sessions WHERE thread_id = ?'
+  );
+  const findFirstUserIdStatement = database.prepare<ThreadSessionRow>(
+    'SELECT first_user_id FROM thread_sessions WHERE thread_id = ?'
   );
   const existsStatement = database.prepare<{ thread_id: string }>(
-    'SELECT thread_id FROM thread_sessions WHERE thread_id = ?',
+    'SELECT thread_id FROM thread_sessions WHERE thread_id = ?'
   );
   const findPreferencesStatement = database.prepare<ThreadSessionRow>(
-    'SELECT model_provider_id, model_id, agent_name FROM thread_sessions WHERE thread_id = ?',
+    'SELECT model_provider_id, model_id, agent_name FROM thread_sessions WHERE thread_id = ?'
   );
   const setModelStatement = database.prepare(
-    'UPDATE thread_sessions SET model_provider_id = ?, model_id = ? WHERE thread_id = ?',
+    'UPDATE thread_sessions SET model_provider_id = ?, model_id = ? WHERE thread_id = ?'
+  );
+  const setFirstUserIdStatement = database.prepare(
+    'UPDATE thread_sessions SET first_user_id = COALESCE(first_user_id, ?) WHERE thread_id = ?'
   );
   const setAgentStatement = database.prepare(
-    'UPDATE thread_sessions SET agent_name = ? WHERE thread_id = ?',
+    'UPDATE thread_sessions SET agent_name = ? WHERE thread_id = ?'
   );
 
   return {
@@ -62,7 +71,7 @@ export function createThreadSessionRepo(database: ThreadSessionDatabase): Thread
         bindStatement.run(normalizedThreadId, normalizedSessionId);
       } catch (error) {
         throw new RuntimeError(
-          `Failed to bind thread "${normalizedThreadId}" to session "${normalizedSessionId}": ${toError(error).message}`,
+          `Failed to bind thread "${normalizedThreadId}" to session "${normalizedSessionId}": ${toError(error).message}`
         );
       }
     },
@@ -74,7 +83,19 @@ export function createThreadSessionRepo(database: ThreadSessionDatabase): Thread
         return findSessionIdStatement.get(normalizedThreadId)?.session_id ?? null;
       } catch (error) {
         throw new RuntimeError(
-          `Failed to look up a session for thread "${normalizedThreadId}": ${toError(error).message}`,
+          `Failed to look up a session for thread "${normalizedThreadId}": ${toError(error).message}`
+        );
+      }
+    },
+
+    findFirstUserId(threadId) {
+      const normalizedThreadId = requireIdentifier('threadId', threadId);
+
+      try {
+        return findFirstUserIdStatement.get(normalizedThreadId)?.first_user_id ?? null;
+      } catch (error) {
+        throw new RuntimeError(
+          `Failed to look up the first user for thread "${normalizedThreadId}": ${toError(error).message}`
         );
       }
     },
@@ -85,7 +106,7 @@ export function createThreadSessionRepo(database: ThreadSessionDatabase): Thread
         return existsStatement.get(normalizedThreadId) !== undefined;
       } catch (error) {
         throw new RuntimeError(
-          `Failed to check whether thread "${normalizedThreadId}" is bound to a session: ${toError(error).message}`,
+          `Failed to check whether thread "${normalizedThreadId}" is bound to a session: ${toError(error).message}`
         );
       }
     },
@@ -97,30 +118,58 @@ export function createThreadSessionRepo(database: ThreadSessionDatabase): Thread
           return { model: null, agent: null };
         }
         return {
-          model: (row.model_provider_id && row.model_id) ? {
-            providerID: row.model_provider_id,
-            modelID: row.model_id,
-          } : null,
+          model:
+            row.model_provider_id && row.model_id
+              ? {
+                  providerID: row.model_provider_id,
+                  modelID: row.model_id,
+                }
+              : null,
           agent: row.agent_name,
         };
       } catch (error) {
-        throw new RuntimeError(`Failed to find preferences for thread "${normalizedThreadId}": ${toError(error).message}`);
+        throw new RuntimeError(
+          `Failed to find preferences for thread "${normalizedThreadId}": ${toError(error).message}`
+        );
       }
     },
+
+    setFirstUserId(threadId, userId) {
+      const normalizedThreadId = requireIdentifier('threadId', threadId);
+      const normalizedUserId = requireIdentifier('userId', userId);
+
+      try {
+        setFirstUserIdStatement.run(normalizedUserId, normalizedThreadId);
+      } catch (error) {
+        throw new RuntimeError(
+          `Failed to set the first user for thread "${normalizedThreadId}": ${toError(error).message}`
+        );
+      }
+    },
+
     setModel(threadId, model) {
       const normalizedThreadId = requireIdentifier('threadId', threadId);
       try {
-        setModelStatement.run(model?.providerID ?? null, model?.modelID ?? null, normalizedThreadId);
+        setModelStatement.run(
+          model?.providerID ?? null,
+          model?.modelID ?? null,
+          normalizedThreadId
+        );
       } catch (error) {
-        throw new RuntimeError(`Failed to set model for thread "${normalizedThreadId}": ${toError(error).message}`);
+        throw new RuntimeError(
+          `Failed to set model for thread "${normalizedThreadId}": ${toError(error).message}`
+        );
       }
     },
+
     setAgent(threadId, agent) {
       const normalizedThreadId = requireIdentifier('threadId', threadId);
       try {
         setAgentStatement.run(agent, normalizedThreadId);
       } catch (error) {
-        throw new RuntimeError(`Failed to set agent for thread "${normalizedThreadId}": ${toError(error).message}`);
+        throw new RuntimeError(
+          `Failed to set agent for thread "${normalizedThreadId}": ${toError(error).message}`
+        );
       }
     },
   };
