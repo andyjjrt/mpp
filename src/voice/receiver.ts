@@ -1,6 +1,14 @@
-import { EndBehaviorType } from '@discordjs/voice';
+import {
+  EndBehaviorType,
+  entersState,
+  VoiceConnectionStatus,
+  type VoiceConnection,
+} from '@discordjs/voice';
+import { EventEmitter } from 'node:events';
+import { opus as prismOpus } from 'prism-media';
 
 import { RuntimeError, toError } from '../utils/errors.js';
+import { createLogger } from '../utils/logger.js';
 import type { AudioReceiveStreamLike } from './transport.js';
 import {
   DEFAULT_SEGMENT_MAX_UTTERANCE_MS,
@@ -10,6 +18,12 @@ import {
   type VoiceSegmenter,
 } from './segmenter.js';
 import { voiceRuntimes, type VoiceRuntimeRegistry, type VoiceRuntimeState } from './runtime.js';
+
+const logger = createLogger({ module: 'voice:receiver' });
+
+export const DISCORD_VOICE_PCM_SAMPLE_RATE_HZ = 48_000;
+export const DISCORD_VOICE_PCM_CHANNELS = 2;
+export const DISCORD_VOICE_OPUS_FRAME_SIZE = 960;
 
 export interface VoiceReceiverSegment extends VoiceSegment {
   guildId: string;
@@ -43,9 +57,15 @@ interface ActiveGuildVoiceReceiver {
   controller: GuildVoiceReceiverController;
   runtime: VoiceRuntimeState;
   segmenter: VoiceSegmenter;
-  subscriptions: Map<string, AudioReceiveStreamLike>;
+  subscriptions: Map<string, SpeakerAudioPipeline>;
   speakingStartListener: (userId: string) => void;
+  speakingEndListener: (userId: string) => void;
   stopped: boolean;
+}
+
+interface SpeakerAudioPipeline {
+  stream: AudioReceiveStreamLike;
+  decoder: prismOpus.Decoder;
 }
 
 const activeReceivers = new Map<string, ActiveGuildVoiceReceiver>();
@@ -94,21 +114,42 @@ function destroySubscription(stream: AudioReceiveStreamLike): void {
   }
 }
 
-export function startGuildVoiceReceiver(
+export async function startGuildVoiceReceiver(
   options: StartGuildVoiceReceiverOptions
-): GuildVoiceReceiverController {
+): Promise<GuildVoiceReceiverController> {
   const guildId = requireGuildId(options.guildId);
   const runtimes = options.runtimes ?? voiceRuntimes;
   const runtime = resolveRuntime(runtimes, guildId);
 
+  logger.debug({ guildId }, 'Starting voice receiver');
+
   if (activeReceivers.has(guildId) || runtime.recording.isActive) {
     throw new RuntimeError('Voice receive is already active for this guild.', 409);
+  }
+
+  // Wait for connection to be ready before setting up listeners
+  try {
+    logger.debug({ guildId }, 'Waiting for voice connection to be ready...');
+    await entersState(runtime.connection as VoiceConnection, VoiceConnectionStatus.Ready, 30_000);
+    logger.debug({ guildId }, 'Voice connection is ready');
+  } catch (error) {
+    logger.error({ err: toError(error), guildId }, 'Voice connection failed to become ready');
+    throw new RuntimeError('Voice connection failed to become ready');
   }
 
   const segmenter = createVoiceSegmenter({
     silenceTimeoutMs: options.silenceTimeoutMs ?? DEFAULT_SEGMENT_SILENCE_TIMEOUT_MS,
     maxUtteranceMs: options.maxUtteranceMs ?? DEFAULT_SEGMENT_MAX_UTTERANCE_MS,
     onSegment: (segment) => {
+      logger.debug(
+        {
+          userId: segment.userId,
+          chunkCount: segment.chunkCount,
+          audioBytes: segment.audio.byteLength,
+          flushReason: segment.flushReason,
+        },
+        'Voice segment created'
+      );
       options.onSegment({
         ...segment,
         guildId: runtime.guildId,
@@ -119,12 +160,21 @@ export function startGuildVoiceReceiver(
     },
   });
 
-  const subscriptions = new Map<string, AudioReceiveStreamLike>();
+  const subscriptions = new Map<string, SpeakerAudioPipeline>();
 
   function subscribeToSpeaker(speakerId: string): void {
     const normalizedSpeakerId = speakerId.trim();
 
+    logger.debug({ speakerId: normalizedSpeakerId }, 'Speaking started, subscribing to speaker');
+
     if (normalizedSpeakerId.length === 0 || subscriptions.has(normalizedSpeakerId)) {
+      logger.debug(
+        {
+          speakerId: normalizedSpeakerId,
+          alreadySubscribed: subscriptions.has(normalizedSpeakerId),
+        },
+        'Skipping speaker subscription'
+      );
       return;
     }
 
@@ -134,13 +184,24 @@ export function startGuildVoiceReceiver(
           behavior: EndBehaviorType.Manual,
         },
       });
+      const decoder = new prismOpus.Decoder({
+        rate: DISCORD_VOICE_PCM_SAMPLE_RATE_HZ,
+        channels: DISCORD_VOICE_PCM_CHANNELS,
+        frameSize: DISCORD_VOICE_OPUS_FRAME_SIZE,
+      });
 
-      subscriptions.set(normalizedSpeakerId, stream);
+      subscriptions.set(normalizedSpeakerId, { stream, decoder });
+      logger.debug({ speakerId: normalizedSpeakerId }, 'Subscribed to speaker audio stream');
 
-      stream.on('data', (chunk: Buffer) => {
+      decoder.on('data', (chunk: Buffer) => {
         if (stream.destroyed || chunk.length === 0) {
           return;
         }
+
+        logger.trace(
+          { speakerId: normalizedSpeakerId, chunkSize: chunk.length },
+          'Received decoded PCM chunk'
+        );
 
         segmenter.pushChunk({
           speakerId: normalizedSpeakerId,
@@ -148,14 +209,45 @@ export function startGuildVoiceReceiver(
         });
       });
 
+      decoder.once('error', (error) => {
+        destroySubscription(stream);
+        logger.error(
+          { err: toError(error), speakerId: normalizedSpeakerId },
+          'Speaker decoder error'
+        );
+        options.onError?.(toError(error), {
+          guildId,
+          speakerId: normalizedSpeakerId,
+          phase: 'stream',
+        });
+      });
+
+      stream.on('data', (chunk: Buffer) => {
+        if (stream.destroyed || chunk.length === 0) {
+          return;
+        }
+
+        logger.trace(
+          { speakerId: normalizedSpeakerId, chunkSize: chunk.length },
+          'Received Opus audio chunk'
+        );
+        decoder.write(chunk);
+      });
+
       const cleanup = () => {
         subscriptions.delete(normalizedSpeakerId);
+        decoder.destroy();
+        logger.debug({ speakerId: normalizedSpeakerId }, 'Speaker stream cleaned up');
       };
 
       stream.once('close', cleanup);
       stream.once('end', cleanup);
       stream.once('error', (error) => {
         cleanup();
+        logger.error(
+          { err: toError(error), speakerId: normalizedSpeakerId },
+          'Speaker stream error'
+        );
         options.onError?.(toError(error), {
           guildId,
           speakerId: normalizedSpeakerId,
@@ -163,6 +255,10 @@ export function startGuildVoiceReceiver(
         });
       });
     } catch (error) {
+      logger.error(
+        { err: toError(error), speakerId: normalizedSpeakerId },
+        'Failed to subscribe to speaker'
+      );
       options.onError?.(toError(error), {
         guildId,
         speakerId: normalizedSpeakerId,
@@ -183,12 +279,22 @@ export function startGuildVoiceReceiver(
     segmenter,
     subscriptions,
     speakingStartListener: subscribeToSpeaker,
+    speakingEndListener: (userId) => {
+      logger.debug({ userId }, 'Speaking ended');
+      segmenter.markSpeakerInactive({ userId });
+    },
     stopped: false,
   };
 
   runtime.connection.receiver.speaking.on('start', activeReceiver.speakingStartListener);
+  (runtime.connection.receiver.speaking as EventEmitter).on(
+    'end',
+    activeReceiver.speakingEndListener
+  );
   activeReceivers.set(guildId, activeReceiver);
   updateRecordingState(runtimes, guildId, true, options.onError);
+
+  logger.info({ guildId }, 'Voice receiver started');
 
   return activeReceiver.controller;
 }
@@ -204,14 +310,21 @@ export function stopGuildVoiceReceiver(
     return;
   }
 
+  logger.info({ guildId: normalizedGuildId }, 'Stopping voice receiver');
+
   activeReceiver.stopped = true;
   activeReceivers.delete(normalizedGuildId);
   activeReceiver.runtime.connection.receiver.speaking.off(
     'start',
     activeReceiver.speakingStartListener
   );
+  (activeReceiver.runtime.connection.receiver.speaking as EventEmitter).off(
+    'end',
+    activeReceiver.speakingEndListener
+  );
 
-  for (const stream of activeReceiver.subscriptions.values()) {
+  for (const { stream, decoder } of activeReceiver.subscriptions.values()) {
+    decoder.destroy();
     destroySubscription(stream);
   }
 
@@ -221,6 +334,8 @@ export function stopGuildVoiceReceiver(
   if (runtimes.getByGuildId(normalizedGuildId) !== null) {
     runtimes.updateRecordingState(normalizedGuildId, false);
   }
+
+  logger.info({ guildId: normalizedGuildId }, 'Voice receiver stopped');
 }
 
 export function isGuildVoiceReceiverActive(guildId: string): boolean {

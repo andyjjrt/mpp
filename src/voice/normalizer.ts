@@ -43,8 +43,10 @@ function readPcm16Samples(buffer: Buffer): Int16Array {
     throw new RuntimeError('pcm must be a Buffer or Int16Array');
   }
 
-  if (buffer.length % PCM16_BYTES_PER_SAMPLE !== 0) {
-    throw new RuntimeError('pcm Buffer length must align to 16-bit samples');
+  // Align buffer to 16-bit samples by truncating odd bytes
+  const alignedLength = buffer.length - (buffer.length % PCM16_BYTES_PER_SAMPLE);
+  if (alignedLength !== buffer.length) {
+    buffer = buffer.subarray(0, alignedLength);
   }
 
   const sampleCount = buffer.length / PCM16_BYTES_PER_SAMPLE;

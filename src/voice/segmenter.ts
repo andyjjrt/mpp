@@ -1,4 +1,5 @@
 import { RuntimeError } from '../utils/errors.js';
+import { createLogger } from '../utils/logger.js';
 
 export type VoiceSegmentFlushReason = 'silence_timeout' | 'max_utterance' | 'manual';
 
@@ -197,6 +198,7 @@ function flushStoredSpeaker(
 }
 
 export function createVoiceSegmenter(options: CreateVoiceSegmenterOptions): VoiceSegmenter {
+  const logger = createLogger({ module: 'voice:segmenter' });
   const silenceTimeoutMs = requireDuration(
     'silenceTimeoutMs',
     options.silenceTimeoutMs ?? DEFAULT_SEGMENT_SILENCE_TIMEOUT_MS
@@ -314,6 +316,8 @@ export function createVoiceSegmenter(options: CreateVoiceSegmenterOptions): Voic
         speaker.startedAt = atMs;
       }
 
+      logger.debug({ userId, chunks: speaker.chunks.length }, 'Speaker marked active');
+
       return cloneState(speaker);
     },
 
@@ -329,6 +333,8 @@ export function createVoiceSegmenter(options: CreateVoiceSegmenterOptions): Voic
       speaker.speaking = false;
       speaker.lastVoiceAt = Math.max(speaker.lastVoiceAt, atMs);
       scheduleSilenceFlush(userId);
+
+      logger.debug({ userId, chunks: speaker.chunks.length }, 'Speaker marked inactive, scheduled silence flush');
 
       return cloneState(speaker);
     },
@@ -362,6 +368,8 @@ export function createVoiceSegmenter(options: CreateVoiceSegmenterOptions): Voic
       speaker.chunks.push(chunk);
       scheduleSilenceFlush(userId);
       scheduleMaxUtteranceFlush(userId);
+
+      logger.trace({ userId, chunkSize: chunk.length, totalChunks: speaker.chunks.length }, 'Audio chunk appended');
 
       emitSegments(segments);
 

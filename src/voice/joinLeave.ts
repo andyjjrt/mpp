@@ -101,6 +101,7 @@ export async function joinGuildVoiceRuntime(
       channelId: voiceChannel.id,
       guildId: thread.guild.id,
       adapterCreator: thread.guild.voiceAdapterCreator,
+      selfDeaf: false,
     });
 
     guildVoiceRuntimes.set({
