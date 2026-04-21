@@ -3,7 +3,15 @@ import pino from 'pino';
 import type { LogLevel } from '../types.js';
 
 const DEFAULT_LOG_LEVEL: LogLevel = 'info';
-const VALID_LOG_LEVELS: readonly LogLevel[] = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'];
+const VALID_LOG_LEVELS: readonly LogLevel[] = [
+  'fatal',
+  'error',
+  'warn',
+  'info',
+  'debug',
+  'trace',
+  'silent',
+];
 
 function resolveInitialLogLevel(): LogLevel {
   const rawValue = process.env.LOG_LEVEL;

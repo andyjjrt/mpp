@@ -7,7 +7,10 @@ export function toIsoTimestamp(value: Date | number): string {
   return date.toISOString();
 }
 
-export function elapsedMilliseconds(startedAt: Date | number, finishedAt: Date | number = Date.now()): number {
+export function elapsedMilliseconds(
+  startedAt: Date | number,
+  finishedAt: Date | number = Date.now()
+): number {
   const start = startedAt instanceof Date ? startedAt.getTime() : startedAt;
   const finish = finishedAt instanceof Date ? finishedAt.getTime() : finishedAt;
 
