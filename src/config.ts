@@ -13,8 +13,20 @@ import type {
 } from './types';
 import { ConfigValidationError } from './utils/errors';
 
-const NODE_ENVIRONMENTS = ['development', 'test', 'production'] as const satisfies readonly NodeEnvironment[];
-const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const satisfies readonly LogLevel[];
+const NODE_ENVIRONMENTS = [
+  'development',
+  'test',
+  'production',
+] as const satisfies readonly NodeEnvironment[];
+const LOG_LEVELS = [
+  'fatal',
+  'error',
+  'warn',
+  'info',
+  'debug',
+  'trace',
+  'silent',
+] as const satisfies readonly LogLevel[];
 
 export const DISCORD_CAPABILITY_REQUIREMENTS = {
   mentions: {
@@ -23,7 +35,12 @@ export const DISCORD_CAPABILITY_REQUIREMENTS = {
   },
   threads: {
     gatewayIntentNames: ['Guilds', 'GuildMessages', 'MessageContent'],
-    permissionFlagNames: ['ViewChannel', 'ReadMessageHistory', 'CreatePublicThreads', 'SendMessagesInThreads'],
+    permissionFlagNames: [
+      'ViewChannel',
+      'ReadMessageHistory',
+      'CreatePublicThreads',
+      'SendMessagesInThreads',
+    ],
   },
   slashCommands: {
     gatewayIntentNames: ['Guilds'],
@@ -35,7 +52,9 @@ export const DISCORD_CAPABILITY_REQUIREMENTS = {
   },
 } as const satisfies DiscordCapabilityRequirementsMap;
 
-export const DISCORD_REQUIRED_PARTIAL_NAMES = ['Channel'] as const satisfies readonly DiscordPartialName[];
+export const DISCORD_REQUIRED_PARTIAL_NAMES = [
+  'Channel',
+] as const satisfies readonly DiscordPartialName[];
 
 function uniqueValues<Value>(values: readonly Value[]): readonly Value[] {
   return [...new Set(values)];
@@ -54,24 +73,37 @@ function resolvePermissionFlag(name: DiscordPermissionFlagName): bigint {
 }
 
 export const DISCORD_REQUIRED_GATEWAY_INTENT_NAMES = uniqueValues(
-  Object.values(DISCORD_CAPABILITY_REQUIREMENTS).flatMap(({ gatewayIntentNames }) => gatewayIntentNames),
+  Object.values(DISCORD_CAPABILITY_REQUIREMENTS).flatMap(
+    ({ gatewayIntentNames }) => gatewayIntentNames
+  )
 ) as readonly DiscordGatewayIntentName[];
 
 export const DISCORD_REQUIRED_PERMISSION_FLAG_NAMES = uniqueValues(
-  Object.values(DISCORD_CAPABILITY_REQUIREMENTS).flatMap(({ permissionFlagNames }) => permissionFlagNames),
+  Object.values(DISCORD_CAPABILITY_REQUIREMENTS).flatMap(
+    ({ permissionFlagNames }) => permissionFlagNames
+  )
 ) as readonly DiscordPermissionFlagName[];
 
-export const DISCORD_REQUIRED_GATEWAY_INTENTS = DISCORD_REQUIRED_GATEWAY_INTENT_NAMES.map(resolveGatewayIntent);
+export const DISCORD_REQUIRED_GATEWAY_INTENTS =
+  DISCORD_REQUIRED_GATEWAY_INTENT_NAMES.map(resolveGatewayIntent);
 export const DISCORD_REQUIRED_PARTIALS = DISCORD_REQUIRED_PARTIAL_NAMES.map(resolvePartial);
-export const DISCORD_REQUIRED_PERMISSION_FLAGS = DISCORD_REQUIRED_PERMISSION_FLAG_NAMES.map(resolvePermissionFlag);
+export const DISCORD_REQUIRED_PERMISSION_FLAGS =
+  DISCORD_REQUIRED_PERMISSION_FLAG_NAMES.map(resolvePermissionFlag);
 
 const environmentSchema = z.object({
   DISCORD_BOT_TOKEN: z.string().trim().min(1, 'DISCORD_BOT_TOKEN is required'),
   DISCORD_CLIENT_ID: z.string().trim().min(1, 'DISCORD_CLIENT_ID is required'),
-  DISCORD_MONITORED_CHANNEL_ID: z.string().trim().min(1, 'DISCORD_MONITORED_CHANNEL_ID is required'),
+  DISCORD_MONITORED_CHANNEL_ID: z
+    .string()
+    .trim()
+    .min(1, 'DISCORD_MONITORED_CHANNEL_ID is required'),
   DISCORD_GUILD_ID: z.string().trim().min(1, 'DISCORD_GUILD_ID cannot be empty').optional(),
   OPENCODE_API_KEY: z.string().trim().min(1, 'OPENCODE_API_KEY cannot be empty').optional(),
-  OPENCODE_BASE_URL: z.string().trim().url('OPENCODE_BASE_URL must be a valid URL').default('https://api.opencode.ai'),
+  OPENCODE_BASE_URL: z
+    .string()
+    .trim()
+    .url('OPENCODE_BASE_URL must be a valid URL')
+    .default('https://api.opencode.ai'),
   ASR_API_KEY: z.string().trim().min(1, 'ASR_API_KEY cannot be empty').optional(),
   ASR_BASE_URL: z.string().trim().url('ASR_BASE_URL must be a valid URL').optional(),
   ASR_MODEL: z.string().trim().min(1, 'ASR_MODEL cannot be empty').optional(),
