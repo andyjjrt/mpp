@@ -8,9 +8,7 @@ import {
   registerInteractionCreateHandler,
   type RegisterInteractionCreateHandlerOptions,
 } from './events/interactionCreate.js';
-import {
-  registerMessageCreateHandler,
-} from './events/messageCreate.js';
+import { registerMessageCreateHandler } from './events/messageCreate.js';
 import { registerReadyHandler, type RegisterReadyHandlerOptions } from './events/ready.js';
 
 export interface RegisterBotEventHandlersOptions {
@@ -45,7 +43,10 @@ export function createDiscordClient(config: AppConfig): Client {
   });
 }
 
-export function registerBotEventHandlers(client: Client, options: RegisterBotEventHandlersOptions): void {
+export function registerBotEventHandlers(
+  client: Client,
+  options: RegisterBotEventHandlersOptions
+): void {
   registerInteractionCreateHandler(client, {
     services: resolveInteractionCreateServices(options.services),
   });

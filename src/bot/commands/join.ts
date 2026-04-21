@@ -8,7 +8,11 @@ import type { ThreadSessionRepo } from '../../storage/threadSessionRepo.js';
 import { RuntimeError, toError } from '../../utils/errors.js';
 import { createLogger } from '../../utils/logger.js';
 import { startGuildVoiceReceiver } from '../../voice/receiver.js';
-import { joinGuildVoiceRuntime, leaveGuildVoiceRuntime, type JoinGuildVoiceRuntimeResult } from '../../voice/joinLeave.js';
+import {
+  joinGuildVoiceRuntime,
+  leaveGuildVoiceRuntime,
+  type JoinGuildVoiceRuntimeResult,
+} from '../../voice/joinLeave.js';
 
 const logger = createLogger({ module: 'bot' });
 
@@ -21,7 +25,7 @@ export interface JoinCommandServices {
 
 export async function handleJoinCommand(
   services: JoinCommandServices,
-  interaction: ChatInputCommandInteraction,
+  interaction: ChatInputCommandInteraction
 ): Promise<JoinGuildVoiceRuntimeResult> {
   const result = await joinGuildVoiceRuntime(
     {
@@ -30,7 +34,7 @@ export async function handleJoinCommand(
     {
       context: interaction,
       userId: interaction.user.id,
-    },
+    }
   );
 
   try {
@@ -45,21 +49,25 @@ export async function handleJoinCommand(
                 opencode: services.opencodeContext,
                 threadSessionRepo: services.threadSessionRepo,
               },
-              segment,
+              segment
             );
 
             if (processedSegment === null) {
-              logger.debug({ segmentChunkCount: segment.chunkCount, threadId: segment.threadId }, 'Discarded voice segment');
+              logger.debug(
+                { segmentChunkCount: segment.chunkCount, threadId: segment.threadId },
+                'Discarded voice segment'
+              );
             }
           })
           .catch((error) => {
-            logger.error({
-              err: toError(error),
-              threadId: segment.threadId,
-              guildId: result.guildId,
-              chunkCount: segment.chunkCount,
-            },
-            'Failed to enqueue or process voice segment',
+            logger.error(
+              {
+                err: toError(error),
+                threadId: segment.threadId,
+                guildId: result.guildId,
+                chunkCount: segment.chunkCount,
+              },
+              'Failed to enqueue or process voice segment'
             );
           });
       },
@@ -71,17 +79,18 @@ export async function handleJoinCommand(
             guildId: result.guildId,
             threadId: result.threadId,
           },
-          'Voice receiver encountered an error',
+          'Voice receiver encountered an error'
         );
       },
     });
   } catch (error) {
-    await leaveGuildVoiceRuntime({
-      threadSessionRepo: services.threadSessionRepo,
-    },
-    {
-      context: interaction,
-    },
+    await leaveGuildVoiceRuntime(
+      {
+        threadSessionRepo: services.threadSessionRepo,
+      },
+      {
+        context: interaction,
+      }
     );
 
     throw new RuntimeError(`Failed to start voice receiver: ${toError(error).message}`);

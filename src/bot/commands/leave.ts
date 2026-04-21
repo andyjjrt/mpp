@@ -1,7 +1,10 @@
 import type { ChatInputCommandInteraction } from 'discord.js';
 
 import type { ThreadSessionRepo } from '../../storage/threadSessionRepo.js';
-import { leaveGuildVoiceRuntime, type LeaveGuildVoiceRuntimeResult } from '../../voice/joinLeave.js';
+import {
+  leaveGuildVoiceRuntime,
+  type LeaveGuildVoiceRuntimeResult,
+} from '../../voice/joinLeave.js';
 
 export interface LeaveCommandServices {
   threadSessionRepo: ThreadSessionRepo;
@@ -9,7 +12,7 @@ export interface LeaveCommandServices {
 
 export async function handleLeaveCommand(
   services: LeaveCommandServices,
-  interaction: ChatInputCommandInteraction,
+  interaction: ChatInputCommandInteraction
 ): Promise<LeaveGuildVoiceRuntimeResult> {
   return leaveGuildVoiceRuntime(
     {
@@ -17,6 +20,6 @@ export async function handleLeaveCommand(
     },
     {
       context: interaction,
-    },
+    }
   );
 }
