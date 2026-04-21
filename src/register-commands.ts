@@ -7,31 +7,31 @@ import { createLogger, setLoggerLevel } from './utils/logger';
 const logger = createLogger({ module: 'register-commands' });
 
 const commands = [
-  new SlashCommandBuilder().setName('join').setDescription('Ask the bot to join your current voice channel.'),
-  new SlashCommandBuilder().setName('leave').setDescription('Ask the bot to leave its current voice channel.'),
+  new SlashCommandBuilder()
+    .setName('join')
+    .setDescription('Ask the bot to join your current voice channel.'),
+  new SlashCommandBuilder()
+    .setName('leave')
+    .setDescription('Ask the bot to leave its current voice channel.'),
   new SlashCommandBuilder()
     .setName('model')
-    .setDescription('Manage AI model settings for this thread')
-    .addSubcommand((sub) => sub.setName('list').setDescription('List available models'))
-    .addSubcommand((sub) =>
-      sub
-        .setName('set')
-        .setDescription('Set a custom model')
-        .addStringOption((opt) => opt.setName('provider').setDescription('Provider ID').setRequired(true))
-        .addStringOption((opt) => opt.setName('model').setDescription('Model ID').setRequired(true)),
+    .setDescription('Set or view the AI model for this thread')
+    .addStringOption((opt) =>
+      opt
+        .setName('provider')
+        .setDescription('Model provider')
+        .setAutocomplete(true)
+        .setRequired(false)
     )
-    .addSubcommand((sub) => sub.setName('clear').setDescription('Clear custom model setting')),
+    .addStringOption((opt) =>
+      opt.setName('model').setDescription('Model ID').setAutocomplete(true).setRequired(false)
+    ),
   new SlashCommandBuilder()
     .setName('agent')
-    .setDescription('Manage AI agent settings for this thread')
-    .addSubcommand((sub) => sub.setName('list').setDescription('List available agents'))
-    .addSubcommand((sub) =>
-      sub
-        .setName('set')
-        .setDescription('Set a custom agent')
-        .addStringOption((opt) => opt.setName('name').setDescription('Agent name').setRequired(true)),
-    )
-    .addSubcommand((sub) => sub.setName('clear').setDescription('Clear custom agent setting')),
+    .setDescription('Set or view the AI agent for this thread')
+    .addStringOption((opt) =>
+      opt.setName('name').setDescription('Agent name').setAutocomplete(true).setRequired(false)
+    ),
 ].map((command) => command.toJSON());
 
 function resolveGuildId(guildId: string | undefined): string {
@@ -55,13 +55,17 @@ export async function registerCommands(): Promise<void> {
       applicationId: config.discord.clientId,
       guildId,
       commandNames: commands.map(({ name }) => name),
-      gatewayIntentNames: config.discord.requirements.capabilityRequirements.slashCommands.gatewayIntentNames,
-      permissionFlagNames: config.discord.requirements.capabilityRequirements.slashCommands.permissionFlagNames,
+      gatewayIntentNames:
+        config.discord.requirements.capabilityRequirements.slashCommands.gatewayIntentNames,
+      permissionFlagNames:
+        config.discord.requirements.capabilityRequirements.slashCommands.permissionFlagNames,
     },
-    'Registering Discord slash commands',
+    'Registering Discord slash commands'
   );
 
-  await rest.put(Routes.applicationGuildCommands(config.discord.clientId, guildId), { body: commands });
+  await rest.put(Routes.applicationGuildCommands(config.discord.clientId, guildId), {
+    body: commands,
+  });
 
   logger.info(
     {
@@ -69,7 +73,7 @@ export async function registerCommands(): Promise<void> {
       guildId,
       registeredCommandCount: commands.length,
     },
-    'Discord slash commands registered',
+    'Discord slash commands registered'
   );
 }
 

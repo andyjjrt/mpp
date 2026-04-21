@@ -1,4 +1,11 @@
-import { Events, type ChatInputCommandInteraction, type Client, type Interaction } from 'discord.js';
+import {
+  EmbedBuilder,
+  Events,
+  type AutocompleteInteraction,
+  type ChatInputCommandInteraction,
+  type Client,
+  type Interaction,
+} from 'discord.js';
 
 import type { AppConfig } from '../../types.js';
 import type { OpencodeSdkContext } from '../../opencode/sdk.js';
@@ -6,8 +13,10 @@ import type { ThreadTaskQueue } from '../../pipeline/enqueue.js';
 import type { ThreadSessionRepo } from '../../storage/threadSessionRepo.js';
 import { RuntimeError, toError } from '../../utils/errors.js';
 import { createLogger } from '../../utils/logger.js';
+import { handleAgentAutocomplete, handleAgentCommand } from '../commands/agent.js';
 import { handleJoinCommand } from '../commands/join.js';
 import { handleLeaveCommand } from '../commands/leave.js';
+import { handleModelAutocomplete, handleModelCommand } from '../commands/model.js';
 
 const logger = createLogger({ module: 'app' });
 
@@ -19,38 +28,77 @@ interface InteractionCreateServices {
 }
 
 export interface InteractionCommandResult {
-  message: string;
+  message?: string;
+  embeds?: EmbedBuilder[];
 }
 
 export interface RegisterInteractionCreateHandlerOptions {
   services: InteractionCreateServices;
   commandHandlers?: InteractionCommandHandlers;
+  autocompleteHandlers?: InteractionAutocompleteHandlers;
 }
 
 export type InteractionCommandHandler = (
   services: InteractionCreateServices,
-  interaction: ChatInputCommandInteraction,
+  interaction: ChatInputCommandInteraction
 ) => Promise<InteractionCommandResult>;
 
+export type InteractionAutocompleteHandler = (
+  services: InteractionCreateServices,
+  interaction: AutocompleteInteraction
+) => Promise<void>;
+
 export interface InteractionCommandHandlers {
+  agent: InteractionCommandHandler;
   join: InteractionCommandHandler;
   leave: InteractionCommandHandler;
+  model: InteractionCommandHandler;
+}
+
+export interface InteractionAutocompleteHandlers {
+  agent: InteractionAutocompleteHandler;
+  model: InteractionAutocompleteHandler;
 }
 
 const defaultInteractionCommandHandlers: InteractionCommandHandlers = {
+  agent: handleAgentCommand,
   join: handleJoinCommand,
   leave: handleLeaveCommand,
+  model: handleModelCommand,
+};
+
+const defaultInteractionAutocompleteHandlers: InteractionAutocompleteHandlers = {
+  agent: handleAgentAutocomplete,
+  model: handleModelAutocomplete,
 };
 
 function resolveInteractionCommandHandler(
   commandName: string,
-  commandHandlers: InteractionCommandHandlers,
+  commandHandlers: InteractionCommandHandlers
 ): InteractionCommandHandler | null {
   switch (commandName) {
+    case 'agent':
+      return commandHandlers.agent;
     case 'join':
       return commandHandlers.join;
     case 'leave':
       return commandHandlers.leave;
+    case 'model':
+      return commandHandlers.model;
+    default:
+      return null;
+  }
+}
+
+function resolveInteractionAutocompleteHandler(
+  commandName: string,
+  autocompleteHandlers: InteractionAutocompleteHandlers
+): InteractionAutocompleteHandler | null {
+  switch (commandName) {
+    case 'agent':
+      return autocompleteHandlers.agent;
+    case 'model':
+      return autocompleteHandlers.model;
     default:
       return null;
   }
@@ -64,26 +112,87 @@ function resolveInteractionErrorMessage(error: unknown): string {
   return 'Something went wrong while processing this command.';
 }
 
-async function sendInteractionReply(interaction: ChatInputCommandInteraction, message: string): Promise<void> {
+async function sendInteractionReply(
+  interaction: ChatInputCommandInteraction,
+  message?: string,
+  embeds?: EmbedBuilder[]
+): Promise<void> {
+  const reply = {
+    content: message,
+    embeds,
+  };
+
   if (interaction.deferred || interaction.replied) {
-    await interaction.editReply({ content: message });
+    await interaction.editReply(reply);
     return;
   }
 
-  await interaction.reply({ content: message });
+  await interaction.reply(reply);
 }
 
 export async function handleInteractionCreate(
   options: RegisterInteractionCreateHandlerOptions,
-  interaction: Interaction,
+  interaction: Interaction
 ): Promise<void> {
+  if (interaction.isAutocomplete()) {
+    const autocompleteHandler = resolveInteractionAutocompleteHandler(
+      interaction.commandName,
+      options.autocompleteHandlers ?? defaultInteractionAutocompleteHandlers
+    );
+
+    if (autocompleteHandler === null) {
+      return;
+    }
+
+    if (!interaction.inGuild()) {
+      await interaction.respond([]);
+      return;
+    }
+
+    try {
+      await autocompleteHandler(options.services, interaction);
+    } catch (error) {
+      logger.error(
+        {
+          err: toError(error),
+          interactionId: interaction.id,
+          commandName: interaction.commandName,
+          channelId: interaction.channelId,
+          guildId: interaction.guildId,
+          userId: interaction.user.id,
+        },
+        'Failed to process Discord autocomplete interaction'
+      );
+
+      if (!interaction.responded) {
+        try {
+          await interaction.respond([]);
+        } catch (replyError) {
+          logger.error(
+            {
+              err: toError(replyError),
+              interactionId: interaction.id,
+              commandName: interaction.commandName,
+              channelId: interaction.channelId,
+              guildId: interaction.guildId,
+              userId: interaction.user.id,
+            },
+            'Failed to send an autocomplete response'
+          );
+        }
+      }
+    }
+
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) {
     return;
   }
 
   const commandHandler = resolveInteractionCommandHandler(
     interaction.commandName,
-    options.commandHandlers ?? defaultInteractionCommandHandlers,
+    options.commandHandlers ?? defaultInteractionCommandHandlers
   );
 
   if (commandHandler === null) {
@@ -99,7 +208,7 @@ export async function handleInteractionCreate(
     await interaction.deferReply();
 
     const result = await commandHandler(options.services, interaction);
-    await sendInteractionReply(interaction, result.message);
+    await sendInteractionReply(interaction, result.message, result.embeds);
   } catch (error) {
     const commandError = toError(error);
     const logContext = {
@@ -129,13 +238,16 @@ export async function handleInteractionCreate(
           guildId: interaction.guildId,
           userId: interaction.user.id,
         },
-        'Failed to send a slash-command reply',
+        'Failed to send a slash-command reply'
       );
     }
   }
 }
 
-export function registerInteractionCreateHandler(client: Client, options: RegisterInteractionCreateHandlerOptions): void {
+export function registerInteractionCreateHandler(
+  client: Client,
+  options: RegisterInteractionCreateHandlerOptions
+): void {
   client.on(Events.InteractionCreate, (interaction) => {
     void handleInteractionCreate(options, interaction);
   });
