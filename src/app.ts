@@ -31,7 +31,7 @@ export async function start(): Promise<Client> {
   const database = initializeDatabase(THREAD_SESSION_DATABASE_PATH);
   const services: BotServices = {
     config,
-    opencodeContext: createOpencodeSdkContext(config),
+    opencodeContext: await createOpencodeSdkContext(config),
     threadSessionRepo: createThreadSessionRepo(database),
     threadTaskQueue: createThreadTaskQueue(),
   };

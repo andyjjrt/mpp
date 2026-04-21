@@ -1,6 +1,10 @@
-import { createOpencodeClient, type OpencodeClient, type OpencodeClientConfig } from '@opencode-ai/sdk';
+import type { OpencodeClient, OpencodeClientConfig } from '@opencode-ai/sdk';
 
 import type { AppConfig } from '../types.js';
+
+interface OpencodeSdkModule {
+  createOpencodeClient: (config: OpencodeClientConfig) => OpencodeClient;
+}
 
 export interface OpencodeSdkContext {
   client: OpencodeClient;
@@ -41,14 +45,25 @@ export function createOpencodeSdkConfig(
   };
 }
 
-export function createOpencodeSdkContext(
+async function createOpencodeClient(config: OpencodeClientConfig): Promise<OpencodeClient> {
+  const sdkModule = (await import('@opencode-ai/sdk')) as OpencodeSdkModule;
+  const createClient = sdkModule.createOpencodeClient;
+
+  if (typeof createClient !== 'function') {
+    throw new Error('Failed to load @opencode-ai/sdk: createOpencodeClient is unavailable');
+  }
+
+  return createClient(config);
+}
+
+export async function createOpencodeSdkContext(
   config: AppConfig,
   directory: string = process.cwd(),
-): OpencodeSdkContext {
+): Promise<OpencodeSdkContext> {
   const sdkConfig = createOpencodeSdkConfig(config, directory);
 
   return {
-    client: createOpencodeClient(sdkConfig),
+    client: await createOpencodeClient(sdkConfig),
     directory: sdkConfig.directory,
     baseUrl: sdkConfig.baseUrl ?? config.opencode.baseUrl,
   };
