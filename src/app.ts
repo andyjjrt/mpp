@@ -1,23 +1,24 @@
+import { join } from 'node:path';
+
 import { Client, Events } from 'discord.js';
 
+import { createDiscordClient, registerBotEventHandlers, type BotServices } from './bot/client';
 import { loadConfig } from './config';
-import type { AppConfig } from './types';
+import { createOpencodeSdkContext } from './opencode/sdk';
+import { createThreadTaskQueue } from './pipeline/enqueue';
+import { initializeDatabase, type ThreadSessionDatabase } from './storage/db';
+import { createThreadSessionRepo } from './storage/threadSessionRepo';
 import { toError } from './utils/errors';
 import { createLogger, setLoggerLevel } from './utils/logger';
-import { elapsedMilliseconds, now, toIsoTimestamp } from './utils/time';
+import { now } from './utils/time';
 
 const logger = createLogger({ module: 'app' });
+const THREAD_SESSION_DATABASE_PATH = join(process.cwd(), '.data', 'thread-sessions.sqlite');
 
-export function createDiscordClient(config: AppConfig): Client {
-  return new Client({
-    intents: config.discord.requirements.gatewayIntents,
-    partials: config.discord.requirements.partials,
-  });
-}
-
-async function stop(client: Client, signal: NodeJS.Signals): Promise<void> {
+async function stop(client: Client, signal: NodeJS.Signals, database: ThreadSessionDatabase): Promise<void> {
   logger.info({ signal }, 'Shutting down Discord client');
   client.destroy();
+  database.close();
 }
 
 export async function start(): Promise<Client> {
@@ -27,22 +28,18 @@ export async function start(): Promise<Client> {
   setLoggerLevel(config.logLevel);
 
   const client = createDiscordClient(config);
+  const database = initializeDatabase(THREAD_SESSION_DATABASE_PATH);
+  const services: BotServices = {
+    opencodeContext: createOpencodeSdkContext(config),
+    threadSessionRepo: createThreadSessionRepo(database),
+    threadTaskQueue: createThreadTaskQueue(),
+  };
 
-  client.once(Events.ClientReady, (readyClient) => {
-    logger.info(
-      {
-        userId: readyClient.user.id,
-        userTag: readyClient.user.tag,
-        applicationId: config.discord.clientId,
-        monitoredChannelId: config.discord.monitoredChannelId,
-        gatewayIntentNames: config.discord.requirements.gatewayIntentNames,
-        partialNames: config.discord.requirements.partialNames,
-        permissionFlagNames: config.discord.requirements.permissionFlagNames,
-        startupStartedAt: toIsoTimestamp(startupStartedAt),
-        startupDurationMs: elapsedMilliseconds(startupStartedAt),
-      },
-      'Discord client is ready',
-    );
+  registerBotEventHandlers(client, {
+    config,
+    services,
+    startupStartedAt,
+    threadSessionDatabasePath: THREAD_SESSION_DATABASE_PATH,
   });
 
   client.on(Events.Warn, (message) => {
@@ -54,11 +51,11 @@ export async function start(): Promise<Client> {
   });
 
   process.once('SIGINT', () => {
-    void stop(client, 'SIGINT');
+    void stop(client, 'SIGINT', database);
   });
 
   process.once('SIGTERM', () => {
-    void stop(client, 'SIGTERM');
+    void stop(client, 'SIGTERM', database);
   });
 
   await client.login(config.discord.botToken);
