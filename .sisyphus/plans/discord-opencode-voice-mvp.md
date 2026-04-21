@@ -127,7 +127,7 @@ Voice input is captured per speaker, segmented into utterances, normalized to WA
 ### Deliver
 
 - [x] `voice/receiver.ts`, `voice/segmenter.ts`, `voice/normalizer.ts`.
-- `asr/client.ts`, `asr/transcribe.ts`.
+- [x] `asr/client.ts`, `asr/transcribe.ts`.
 
 ### Implementation Notes
 
@@ -156,8 +156,8 @@ Voice transcript enters the same OpenCode session bound to the thread, and assis
 
 ### Deliver
 
-- `pipeline/handleVoiceSegment.ts`.
-- Receiver-to-pipeline wiring via `pipeline/enqueue.ts`.
+- [x] `pipeline/handleVoiceSegment.ts`.
+- [x] Receiver-to-pipeline wiring via `pipeline/enqueue.ts`.
 
 ### Implementation Notes
 
