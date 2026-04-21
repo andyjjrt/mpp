@@ -30,12 +30,13 @@ The repo can build and run a minimal TypeScript Discord bot skeleton.
 
 ### Deliver
 
-- Initialize Node + TypeScript project structure matching the spec.
-- Add runtime dependencies for Discord, voice, SQLite, logging, env/config validation, HTTP/ASR, and the official OpenCode SDK.
-- Add `tsconfig`, scripts, `.env.example`, and app bootstrap files.
-- Create `src/app.ts`, `src/config.ts`, `src/types.ts`, and `src/utils/{logger,errors,time}.ts`.
-- Define the Discord bootstrap contract: bot token, application/client ID, monitored channel ID, and the intents/permissions needed for mentions, threads, slash commands, and voice.
-- Add slash-command registration for `join` and `leave` as part of bootstrap so Phase 2 has real commands to exercise.
+- [x] Initialize Node + TypeScript project structure matching the spec.
+- [x] Add runtime dependencies for Discord, voice, SQLite, logging, env/config validation, HTTP/ASR, and the official OpenCode SDK.
+- [x] Add `tsconfig`, scripts, `.env.example`, and app bootstrap files.
+  - [x] Add `tsconfig.json` and `.env.example` bootstrap config files.
+- [x] Create `src/app.ts`, `src/config.ts`, `src/types.ts`, and `src/utils/{logger,errors,time}.ts`.
+- [x] Define the Discord bootstrap contract: bot token, application/client ID, monitored channel ID, and the intents/permissions needed for mentions, threads, slash commands, and voice.
+- [x] Add slash-command registration for `join` and `leave` as part of bootstrap so Phase 2 has real commands to exercise.
 
 ### Done When
 
