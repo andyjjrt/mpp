@@ -1,3 +1,4 @@
+import './bun-polyfills';
 import { join } from 'node:path';
 
 import { Client, Events } from 'discord.js';
@@ -15,7 +16,11 @@ import { now } from './utils/time';
 const logger = createLogger({ module: 'app' });
 const THREAD_SESSION_DATABASE_PATH = join(process.cwd(), '.data', 'thread-sessions.sqlite');
 
-async function stop(client: Client, signal: NodeJS.Signals, database: ThreadSessionDatabase): Promise<void> {
+async function stop(
+  client: Client,
+  signal: NodeJS.Signals,
+  database: ThreadSessionDatabase
+): Promise<void> {
   logger.info({ signal }, 'Shutting down Discord client');
   client.destroy();
   database.close();
