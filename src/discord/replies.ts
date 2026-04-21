@@ -1,4 +1,4 @@
-import type { AnyThreadChannel, Message } from 'discord.js';
+import { EmbedBuilder, type AnyThreadChannel, type Message } from 'discord.js';
 
 import type { AssistantOutputPart } from '../opencode/parts';
 import { RuntimeError, toError } from '../utils/errors.js';
@@ -63,6 +63,22 @@ async function sendContentChunk(thread: AnyThreadChannel, chunk: string): Promis
   } catch (error) {
     throw new RuntimeError(
       `Failed to send a message in thread ${thread.id}: ${toError(error).message}`
+    );
+  }
+}
+
+async function sendEmbedChunk(
+  thread: AnyThreadChannel,
+  embed: EmbedBuilder
+): Promise<Message<true>> {
+  try {
+    return await thread.send({
+      embeds: [embed],
+      allowedMentions: { parse: [] },
+    });
+  } catch (error) {
+    throw new RuntimeError(
+      `Failed to send an embed in thread ${thread.id}: ${toError(error).message}`
     );
   }
 }
@@ -221,6 +237,22 @@ export async function sendRepliesToThread(
   assertThreadSendable(thread);
   await ensureThreadOpen(thread);
   return sendContentChunks(thread, content);
+}
+
+export async function sendEmbedRepliesToThread(
+  thread: AnyThreadChannel,
+  embeds: readonly EmbedBuilder[]
+): Promise<readonly Message<true>[]> {
+  assertThreadSendable(thread);
+  await ensureThreadOpen(thread);
+
+  const messages: Message<true>[] = [];
+
+  for (const embed of embeds) {
+    messages.push(await sendEmbedChunk(thread, embed));
+  }
+
+  return messages;
 }
 
 export async function sendAssistantReplies(

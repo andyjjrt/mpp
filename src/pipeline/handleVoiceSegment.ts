@@ -1,10 +1,15 @@
-import type { AnyThreadChannel, Guild } from 'discord.js';
+import { EmbedBuilder, type AnyThreadChannel, type Guild } from 'discord.js';
 
 import type { AppConfig } from '../types.js';
+import { sendEmbedRepliesToThread } from '../discord/replies.js';
 import { handleThreadMessage, type HandleThreadMessageResult } from './handleThreadMessage.js';
 import type { OpencodeSdkContext } from '../opencode/sdk.js';
 import { DEFAULT_NORMALIZED_SAMPLE_RATE, normalizePcmToWav } from '../voice/normalizer.js';
-import type { VoiceReceiverSegment } from '../voice/receiver.js';
+import {
+  DISCORD_VOICE_PCM_CHANNELS,
+  DISCORD_VOICE_PCM_SAMPLE_RATE_HZ,
+  type VoiceReceiverSegment,
+} from '../voice/receiver.js';
 import { guildVoiceRuntimes } from '../voice/runtime.js';
 import { RuntimeError, toError } from '../utils/errors.js';
 import { createLogger } from '../utils/logger.js';
@@ -12,8 +17,8 @@ import { isAsrTranscriptionError, transcribeWav } from '../asr/transcribe.js';
 import type { ThreadSessionRepo } from '../storage/threadSessionRepo.js';
 
 const logger = createLogger({ module: 'pipeline' });
-
-const DEFAULT_VOICE_SEGMENT_SAMPLE_RATE_HZ = 48_000;
+const TRANSCRIPT_EMBED_COLOR = 0x5865f2;
+const TRANSCRIPT_EMBED_DESCRIPTION_LIMIT = 4_096;
 
 export interface HandleVoiceSegmentDependencies {
   config: AppConfig;
@@ -73,16 +78,55 @@ async function getThreadFromSegment(segment: VoiceReceiverSegment): Promise<AnyT
   }
 }
 
+function createTranscriptEmbeds(displayName: string, transcript: string): EmbedBuilder[] {
+  const content = `${displayName}: ${transcript}`.trim();
+  const chunks: string[] = [];
+
+  for (let start = 0; start < content.length; start += TRANSCRIPT_EMBED_DESCRIPTION_LIMIT) {
+    chunks.push(content.slice(start, start + TRANSCRIPT_EMBED_DESCRIPTION_LIMIT));
+  }
+
+  return chunks.map((chunk, index) =>
+    new EmbedBuilder()
+      .setColor(TRANSCRIPT_EMBED_COLOR)
+      .setTitle(index === 0 ? 'Voice Transcript' : 'Voice Transcript (cont.)')
+      .setDescription(chunk)
+  );
+}
+
 export async function handleVoiceSegment(
   dependencies: HandleVoiceSegmentDependencies,
   segment: VoiceReceiverSegment
 ): Promise<HandleVoiceSegmentResult | null> {
-  const sourceSampleRateHz =
-    dependencies.sourceSampleRateHz ?? DEFAULT_VOICE_SEGMENT_SAMPLE_RATE_HZ;
+  logger.debug(
+    {
+      userId: segment.userId,
+      guildId: segment.guildId,
+      chunkCount: segment.chunkCount,
+      audioBytes: segment.audio.byteLength,
+      flushReason: segment.flushReason,
+    },
+    'Handling voice segment'
+  );
+  const sourceSampleRateHz = dependencies.sourceSampleRateHz ?? DISCORD_VOICE_PCM_SAMPLE_RATE_HZ;
   const runtime = guildVoiceRuntimes.get(segment.guildId);
 
   if (runtime === null) {
     throw new RuntimeError(`No active voice runtime exists for guild ${segment.guildId}`);
+  }
+
+  // Only allow voice from the thread creator (first user)
+  const firstUserId = dependencies.threadSessionRepo.findFirstUserId(segment.threadId);
+  if (firstUserId !== null && firstUserId !== segment.userId) {
+    logger.debug(
+      {
+        userId: segment.userId,
+        firstUserId,
+        threadId: segment.threadId,
+      },
+      'Voice input rejected: user is not the thread creator'
+    );
+    return null;
   }
 
   const displayName = await resolveDisplayName(runtime.guild, segment.userId);
@@ -92,6 +136,7 @@ export async function handleVoiceSegment(
     normalizedAudio = normalizePcmToWav({
       pcm: segment.audio,
       sampleRate: sourceSampleRateHz,
+      channels: DISCORD_VOICE_PCM_CHANNELS,
       targetSampleRate: DEFAULT_NORMALIZED_SAMPLE_RATE,
     });
   } catch (error) {
@@ -110,10 +155,12 @@ export async function handleVoiceSegment(
 
   let transcript: string;
   try {
+    logger.debug({ audioBytes: normalizedAudio.buffer.byteLength }, 'Starting ASR transcription');
     const transcriptResult = await transcribeWav(normalizedAudio.buffer, undefined, {
       asr: dependencies.config.asr,
     });
     transcript = transcriptResult.text.trim();
+    logger.debug({ transcriptLength: transcript.length }, 'ASR transcription completed');
   } catch (error) {
     const asrError = isAsrTranscriptionError(error) ? error : null;
     logger.info(
@@ -144,6 +191,7 @@ export async function handleVoiceSegment(
 
   const promptText = `${displayName}: ${transcript}`;
   const thread = await getThreadFromSegment(segment);
+  await sendEmbedRepliesToThread(thread, createTranscriptEmbeds(displayName, transcript));
 
   const promptResult = await handleThreadMessage(
     {
@@ -155,6 +203,8 @@ export async function handleVoiceSegment(
       text: promptText,
     }
   );
+
+  logger.debug({ transcript, displayName }, 'Voice message processed successfully');
 
   return {
     ...promptResult,
