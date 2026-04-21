@@ -25,10 +25,12 @@ export function createThreadTaskQueue(): ThreadTaskQueue {
 
   async function enqueue<Result>(threadId: string, task: () => Promise<Result>): Promise<Result> {
     const normalizedThreadId = requireThreadId(threadId);
-    const queue = queues.get(normalizedThreadId) ?? {
-      tail: Promise.resolve(),
-      size: 0,
-    } satisfies ThreadQueueState;
+    const queue =
+      queues.get(normalizedThreadId) ??
+      ({
+        tail: Promise.resolve(),
+        size: 0,
+      } satisfies ThreadQueueState);
     const previousTail = queue.tail.catch(() => undefined);
     let releaseCurrentTail!: () => void;
     const currentTail = new Promise<void>((resolve) => {
