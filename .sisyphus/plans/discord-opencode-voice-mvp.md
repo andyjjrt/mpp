@@ -57,7 +57,7 @@ A main-channel mention creates an OpenCode session, creates a Discord thread, bi
 
 ### Deliver
 
-- `storage/db.ts` and `storage/threadSessionRepo.ts` with `bind`, `findSessionId`, and `exists`.
+- [x] `storage/db.ts` and `storage/threadSessionRepo.ts` with `bind`, `findSessionId`, and `exists`.
 - `opencode/sdk.ts`, `opencode/sessions.ts`, `opencode/parts.ts`, and `opencode/events.ts`.
 - `discord/sessionThreads.ts`, `discord/threadGuards.ts`, `discord/partRenderer.ts`, `discord/messageSplitter.ts`, and `discord/replies.ts`.
 - `pipeline/enqueue.ts`, `pipeline/handleThreadMessage.ts`, and `pipeline/handleAssistantParts.ts`.
