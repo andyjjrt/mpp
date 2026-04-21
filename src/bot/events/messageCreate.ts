@@ -4,6 +4,7 @@ import { sendRepliesToThread } from '../../discord/replies.js';
 import { createSessionThreadFromMessage } from '../../discord/sessionThreads.js';
 import { isThreadMessage } from '../../discord/threadGuards.js';
 import type { OpencodeSdkContext } from '../../opencode/sdk.js';
+import type { HandleThreadMessageResult } from '../../pipeline/handleThreadMessage.js';
 import { handleThreadMessage } from '../../pipeline/handleThreadMessage.js';
 import type { ThreadTaskQueue } from '../../pipeline/enqueue.js';
 import type { ThreadSessionRepo } from '../../storage/threadSessionRepo.js';
@@ -43,7 +44,10 @@ function isBotAuthoredMessage(message: Message): boolean {
   return message.author.bot || message.webhookId !== null;
 }
 
-async function resolveSessionThreadFromMessage(message: Message<true>, title: string): Promise<AnyThreadChannel> {
+async function resolveSessionThreadFromMessage(
+  message: Message<true>,
+  title: string
+): Promise<AnyThreadChannel> {
   if (message.hasThread && message.thread !== null) {
     return message.thread;
   }
@@ -67,7 +71,7 @@ async function sendMessageErrorReply(message: Message, error: Error): Promise<vo
         messageId: message.id,
         channelId: message.channelId,
       },
-      'Failed to send an error reply for a Discord message',
+      'Failed to send an error reply for a Discord message'
     );
   }
 }
@@ -81,7 +85,7 @@ async function sendThreadErrorReply(thread: AnyThreadChannel, error: Error): Pro
         err: toError(replyError),
         threadId: thread.id,
       },
-      'Failed to send an error reply in a managed session thread',
+      'Failed to send an error reply in a managed session thread'
     );
   }
 }
@@ -91,7 +95,8 @@ async function enqueueThreadPrompt(
   sourceMessage: Message<true>,
   thread: AnyThreadChannel,
   text: string,
-): Promise<void> {
+  firstUserId?: string
+): Promise<HandleThreadMessageResult> {
   const result = await services.threadTaskQueue.enqueue(thread.id, async () =>
     handleThreadMessage(
       {
@@ -101,8 +106,9 @@ async function enqueueThreadPrompt(
       {
         thread,
         text,
-      },
-    ),
+        firstUserId,
+      }
+    )
   );
 
   logger.info(
@@ -112,15 +118,18 @@ async function enqueueThreadPrompt(
       sessionId: result.sessionId,
       createdSession: result.createdSession,
       assistantPartCount: result.promptResult.parts.length,
+      terminalEvent: result.promptResult.terminalEvent,
       queuePending: services.threadTaskQueue.hasPending(thread.id),
     },
-    'Processed serialized text prompt for a managed thread',
+    'Processed serialized text prompt for a managed thread'
   );
+
+  return result;
 }
 
 async function handleManagedThreadMessage(
   services: MessageCreateServices,
-  message: Message<true> & { channel: AnyThreadChannel },
+  message: Message<true> & { channel: AnyThreadChannel }
 ): Promise<void> {
   if (!services.threadSessionRepo.exists(message.channel.id)) {
     return;
@@ -137,7 +146,7 @@ async function handleManagedThreadMessage(
         messageId: message.id,
         threadId: message.channel.id,
       },
-      'Failed to process a managed thread message',
+      'Failed to process a managed thread message'
     );
 
     await sendThreadErrorReply(message.channel, runtimeError);
@@ -148,7 +157,7 @@ async function handleMentionMessage(
   client: Client,
   config: AppConfig,
   services: MessageCreateServices,
-  message: Message<true>,
+  message: Message<true>
 ): Promise<void> {
   const botUserId = client.user?.id;
 
@@ -163,12 +172,27 @@ async function handleMentionMessage(
   }
 
   const threadTitle = resolveThreadTitle(message, prompt);
+  const createdThread = !message.hasThread;
   const thread = await resolveSessionThreadFromMessage(message, threadTitle);
 
   try {
-    await enqueueThreadPrompt(services, message, thread, prompt);
+    await enqueueThreadPrompt(
+      services,
+      message,
+      thread,
+      prompt,
+      createdThread ? message.author.id : undefined
+    );
+
+    if (createdThread) {
+      services.threadSessionRepo.setFirstUserId(thread.id, message.author.id);
+    }
   } catch (error) {
     const runtimeError = toError(error);
+
+    if (createdThread && services.threadSessionRepo.exists(thread.id)) {
+      services.threadSessionRepo.setFirstUserId(thread.id, message.author.id);
+    }
 
     logger.error(
       {
@@ -177,7 +201,7 @@ async function handleMentionMessage(
         threadId: thread.id,
         monitoredChannelId: config.discord.monitoredChannelId,
       },
-      'Failed to process a monitored-channel mention',
+      'Failed to process a monitored-channel mention'
     );
 
     await sendThreadErrorReply(thread, runtimeError);
@@ -188,7 +212,7 @@ async function handleDiscordMessage(
   client: Client,
   config: AppConfig,
   services: MessageCreateServices,
-  message: Message,
+  message: Message
 ): Promise<void> {
   if (isBotAuthoredMessage(message) || !message.inGuild()) {
     return;
@@ -218,14 +242,17 @@ async function handleDiscordMessage(
         channelId: cachedMessage.channelId,
         monitoredChannelId: config.discord.monitoredChannelId,
       },
-      'Failed to prepare a monitored-channel mention for processing',
+      'Failed to prepare a monitored-channel mention for processing'
     );
 
     await sendMessageErrorReply(cachedMessage, runtimeError);
   }
 }
 
-export function registerMessageCreateHandler(client: Client, options: RegisterMessageCreateHandlerOptions): void {
+export function registerMessageCreateHandler(
+  client: Client,
+  options: RegisterMessageCreateHandlerOptions
+): void {
   client.on(Events.MessageCreate, (message) => {
     void handleDiscordMessage(client, options.config, options.services, message);
   });

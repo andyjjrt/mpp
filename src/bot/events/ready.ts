@@ -27,7 +27,7 @@ export function registerReadyHandler(client: Client, options: RegisterReadyHandl
         startupStartedAt: toIsoTimestamp(options.startupStartedAt),
         startupDurationMs: elapsedMilliseconds(options.startupStartedAt),
       },
-      'Discord client is ready',
+      'Discord client is ready'
     );
   });
 }
