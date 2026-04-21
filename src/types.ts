@@ -4,7 +4,11 @@ export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' |
 export type NodeEnvironment = 'development' | 'test' | 'production';
 
 export type DiscordCapabilityName = 'mentions' | 'threads' | 'slashCommands' | 'voice';
-export type DiscordGatewayIntentName = 'Guilds' | 'GuildMessages' | 'MessageContent' | 'GuildVoiceStates';
+export type DiscordGatewayIntentName =
+  | 'Guilds'
+  | 'GuildMessages'
+  | 'MessageContent'
+  | 'GuildVoiceStates';
 export type DiscordPartialName = 'Channel';
 export type DiscordPermissionFlagName =
   | 'ViewChannel'
@@ -21,7 +25,10 @@ export interface DiscordCapabilityRequirements {
   permissionFlagNames: readonly DiscordPermissionFlagName[];
 }
 
-export type DiscordCapabilityRequirementsMap = Record<DiscordCapabilityName, DiscordCapabilityRequirements>;
+export type DiscordCapabilityRequirementsMap = Record<
+  DiscordCapabilityName,
+  DiscordCapabilityRequirements
+>;
 
 export interface DiscordRequirements {
   capabilityRequirements: DiscordCapabilityRequirementsMap;

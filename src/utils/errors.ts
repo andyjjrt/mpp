@@ -3,7 +3,7 @@ export class AppError extends Error {
     message: string,
     public readonly code: string,
     public readonly statusCode: number = 500,
-    public readonly isOperational: boolean = true,
+    public readonly isOperational: boolean = true
   ) {
     super(message);
     this.name = this.constructor.name;
@@ -13,7 +13,12 @@ export class AppError extends Error {
 
 export class ConfigValidationError extends AppError {
   constructor(public readonly issues: readonly string[]) {
-    super(`Configuration validation failed: ${issues.join('; ')}`, 'CONFIG_VALIDATION_ERROR', 500, true);
+    super(
+      `Configuration validation failed: ${issues.join('; ')}`,
+      'CONFIG_VALIDATION_ERROR',
+      500,
+      true
+    );
   }
 }
 
