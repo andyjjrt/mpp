@@ -33,7 +33,10 @@ export interface AsrClient {
   readonly baseUrl: string;
   readonly model: string;
   readonly endpointPath: string;
-  requestWavTranscription(audio: Uint8Array, options?: AsrClientRequestOptions): Promise<AsrClientResponse>;
+  requestWavTranscription(
+    audio: Uint8Array,
+    options?: AsrClientRequestOptions
+  ): Promise<AsrClientResponse>;
 }
 
 function requireNonEmptyString(name: string, value: string): string {
@@ -69,7 +72,11 @@ function normalizeOptionalApiKey(value?: string): string | undefined {
   return normalizedValue.length === 0 ? undefined : normalizedValue;
 }
 
-function mergeHeaders(defaultHeaders?: HeadersInit, requestHeaders?: HeadersInit, apiKey?: string): Headers {
+function mergeHeaders(
+  defaultHeaders?: HeadersInit,
+  requestHeaders?: HeadersInit,
+  apiKey?: string
+): Headers {
   const headers = new Headers(defaultHeaders);
 
   if (requestHeaders !== undefined) {
@@ -102,7 +109,11 @@ function readOptionalString(value: string | undefined): string | undefined {
   return normalizedValue.length === 0 ? undefined : normalizedValue;
 }
 
-function buildMultipartBody(model: string, audio: Uint8Array, options: AsrClientRequestOptions = {}): FormData {
+function buildMultipartBody(
+  model: string,
+  audio: Uint8Array,
+  options: AsrClientRequestOptions = {}
+): FormData {
   const formData = new FormData();
   const filename = readOptionalString(options.filename) ?? DEFAULT_WAV_FILENAME;
   const contentType = readOptionalString(options.contentType) ?? DEFAULT_WAV_CONTENT_TYPE;

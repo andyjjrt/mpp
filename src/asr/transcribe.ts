@@ -3,11 +3,7 @@ import type { Headers } from 'undici';
 import { loadConfig } from '../config.js';
 import type { AppConfig } from '../types.js';
 import { AppError, toError } from '../utils/errors.js';
-import {
-  createAsrClient,
-  type AsrClient,
-  type AsrClientResponse,
-} from './client.js';
+import { createAsrClient, type AsrClient, type AsrClientResponse } from './client.js';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -60,7 +56,9 @@ export interface LegacyAsrTranscriptionFailure {
   };
 }
 
-export type LegacyAsrTranscriptionResult = LegacyAsrTranscriptionSuccess | LegacyAsrTranscriptionFailure;
+export type LegacyAsrTranscriptionResult =
+  | LegacyAsrTranscriptionSuccess
+  | LegacyAsrTranscriptionFailure;
 
 export interface TranscribeWavOptions {
   asr?: AppConfig['asr'];
@@ -242,11 +240,13 @@ function normalizeTranscriptPayload(payload: unknown): NormalizedTranscriptPaylo
   }
 
   const transcriptText =
-    readString(getNestedValue(payload, ['text']))
-    ?? readString(getNestedValue(payload, ['transcript']))
-    ?? readString(getNestedValue(payload, ['result', 'text']))
-    ?? readString(getNestedValue(payload, ['result', 'transcript']))
-    ?? readString(getNestedValue(payload, ['results', 'channels', 0, 'alternatives', 0, 'transcript']));
+    readString(getNestedValue(payload, ['text'])) ??
+    readString(getNestedValue(payload, ['transcript'])) ??
+    readString(getNestedValue(payload, ['result', 'text'])) ??
+    readString(getNestedValue(payload, ['result', 'transcript'])) ??
+    readString(
+      getNestedValue(payload, ['results', 'channels', 0, 'alternatives', 0, 'transcript'])
+    );
 
   if (transcriptText === undefined) {
     return null;
@@ -410,7 +410,12 @@ function createHttpFailure(response: AsrClientResponse, attempts: number): AsrTr
   });
 }
 
-function createTransportFailure(error: unknown, attempts: number, timeoutMs: number, timedOut: boolean): AsrTranscriptionError {
+function createTransportFailure(
+  error: unknown,
+  attempts: number,
+  timeoutMs: number,
+  timedOut: boolean
+): AsrTranscriptionError {
   const normalizedError = toError(error);
 
   if (timedOut || normalizedError.name === 'TimeoutError') {
@@ -435,11 +440,14 @@ function createTransportFailure(error: unknown, attempts: number, timeoutMs: num
 }
 
 function createTranscriptFailure(
-  code: Extract<AsrTranscriptionErrorCode, 'ASR_INVALID_RESPONSE' | 'ASR_EMPTY_TRANSCRIPT' | 'ASR_TRANSCRIPT_TOO_SHORT'>,
+  code: Extract<
+    AsrTranscriptionErrorCode,
+    'ASR_INVALID_RESPONSE' | 'ASR_EMPTY_TRANSCRIPT' | 'ASR_TRANSCRIPT_TOO_SHORT'
+  >,
   message: string,
   attempts: number,
   statusCode: number,
-  raw: unknown,
+  raw: unknown
 ): AsrTranscriptionError {
   return new AsrTranscriptionError({
     code,
@@ -458,16 +466,22 @@ export function isAsrTranscriptionError(error: unknown): error is AsrTranscripti
 export async function transcribeWav(
   buffer: Uint8Array,
   filename?: string,
-  options: TranscribeWavOptions = {},
+  options: TranscribeWavOptions = {}
 ): Promise<AsrTranscriptionResult> {
   const audio = requireAudioBuffer(buffer);
   const client = createClientFromOptions(options);
   const timeoutMs = requirePositiveInteger('timeoutMs', options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  const maxAttempts = requirePositiveInteger('maxAttempts', options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
-  const retryDelayMs = requirePositiveInteger('retryDelayMs', options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS);
+  const maxAttempts = requirePositiveInteger(
+    'maxAttempts',
+    options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+  );
+  const retryDelayMs = requirePositiveInteger(
+    'retryDelayMs',
+    options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS
+  );
   const minimumTranscriptCharacters = requirePositiveInteger(
     'minimumTranscriptCharacters',
-    options.minimumTranscriptCharacters ?? DEFAULT_MINIMUM_TRANSCRIPT_CHARACTERS,
+    options.minimumTranscriptCharacters ?? DEFAULT_MINIMUM_TRANSCRIPT_CHARACTERS
   );
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -487,7 +501,9 @@ export async function transcribeWav(
           throw failure;
         }
 
-        await sleep(resolveRetryAfterDelayMs(response.headers, resolveRetryDelayMs(attempt, retryDelayMs)));
+        await sleep(
+          resolveRetryAfterDelayMs(response.headers, resolveRetryDelayMs(attempt, retryDelayMs))
+        );
         continue;
       }
 
@@ -499,7 +515,7 @@ export async function transcribeWav(
           'ASR response did not include a transcript string',
           attempt,
           response.statusCode,
-          response.raw,
+          response.raw
         );
       }
 
@@ -511,7 +527,7 @@ export async function transcribeWav(
           'ASR returned an empty transcript',
           attempt,
           response.statusCode,
-          response.raw,
+          response.raw
         );
       }
 
@@ -521,7 +537,7 @@ export async function transcribeWav(
           `ASR transcript was shorter than the required ${minimumTranscriptCharacters} visible characters`,
           attempt,
           response.statusCode,
-          response.raw,
+          response.raw
         );
       }
 
@@ -556,7 +572,7 @@ export async function transcribeWav(
 export async function transcribeNormalizedWav(
   config: AppConfig,
   input: NormalizedWavInput,
-  options: Omit<TranscribeWavOptions, 'asr'> = {},
+  options: Omit<TranscribeWavOptions, 'asr'> = {}
 ): Promise<LegacyAsrTranscriptionResult> {
   void input.durationMs;
   void input.sampleRateHz;
