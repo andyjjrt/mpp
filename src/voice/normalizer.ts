@@ -91,7 +91,7 @@ function mixToMono(samples: Int16Array, channels: number): Int16Array {
     let mixedSample = 0;
 
     for (let channelIndex = 0; channelIndex < channels; channelIndex += 1) {
-      mixedSample += samples[(frameIndex * channels) + channelIndex];
+      mixedSample += samples[frameIndex * channels + channelIndex];
     }
 
     monoSamples[frameIndex] = clampPcm16Sample(mixedSample / channels);
@@ -100,7 +100,11 @@ function mixToMono(samples: Int16Array, channels: number): Int16Array {
   return monoSamples;
 }
 
-function resampleMonoPcm16(samples: Int16Array, sourceSampleRate: number, targetSampleRate: number): Int16Array {
+function resampleMonoPcm16(
+  samples: Int16Array,
+  sourceSampleRate: number,
+  targetSampleRate: number
+): Int16Array {
   if (samples.length === 0) {
     return new Int16Array(0);
   }
@@ -109,7 +113,10 @@ function resampleMonoPcm16(samples: Int16Array, sourceSampleRate: number, target
     return Int16Array.from(samples);
   }
 
-  const outputSampleCount = Math.max(1, Math.round((samples.length * targetSampleRate) / sourceSampleRate));
+  const outputSampleCount = Math.max(
+    1,
+    Math.round((samples.length * targetSampleRate) / sourceSampleRate)
+  );
   const output = new Int16Array(outputSampleCount);
   const rateRatio = sourceSampleRate / targetSampleRate;
 
@@ -120,9 +127,7 @@ function resampleMonoPcm16(samples: Int16Array, sourceSampleRate: number, target
     const interpolation = sourceIndex - leftIndex;
     const leftSample = samples[leftIndex] ?? samples[samples.length - 1] ?? 0;
     const rightSample = samples[rightIndex] ?? leftSample;
-    output[outputIndex] = clampPcm16Sample(
-      leftSample + ((rightSample - leftSample) * interpolation),
-    );
+    output[outputIndex] = clampPcm16Sample(leftSample + (rightSample - leftSample) * interpolation);
   }
 
   return output;
@@ -155,7 +160,7 @@ export function normalizePcmToWav(input: NormalizePcmToWavInput): NormalizedWavA
   const channelCount = requirePositiveInteger('channels', input.channels ?? PCM16_MONO_CHANNELS);
   const targetSampleRate = requirePositiveInteger(
     'targetSampleRate',
-    input.targetSampleRate ?? DEFAULT_NORMALIZED_SAMPLE_RATE,
+    input.targetSampleRate ?? DEFAULT_NORMALIZED_SAMPLE_RATE
   );
   const sourceSamples = resolveInputSamples(input.pcm);
   const monoSamples = mixToMono(sourceSamples, channelCount);
@@ -170,9 +175,10 @@ export function normalizePcmToWav(input: NormalizePcmToWavInput): NormalizedWavA
     buffer,
     data,
     sampleCount: normalizedSamples.length,
-    durationMs: normalizedSamples.length === 0
-      ? 0
-      : Math.round((normalizedSamples.length / targetSampleRate) * 1_000),
+    durationMs:
+      normalizedSamples.length === 0
+        ? 0
+        : Math.round((normalizedSamples.length / targetSampleRate) * 1_000),
     sampleRate: targetSampleRate,
     channels: PCM16_MONO_CHANNELS,
     bitsPerSample: PCM16_BITS_PER_SAMPLE,

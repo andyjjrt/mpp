@@ -1,7 +1,7 @@
-import type { VoiceConnection } from '@discordjs/voice';
 import type { Guild, PublicThreadChannel, VoiceBasedChannel } from 'discord.js';
 
 import { RuntimeError } from '../utils/errors.js';
+import type { VoiceConnectionLike } from './transport.js';
 
 export interface GuildVoiceSessionRef {
   id: string;
@@ -24,7 +24,7 @@ export interface VoiceRuntimeState {
   threadId: string;
   sessionId: string;
   voiceChannelId: string;
-  connection: VoiceConnection;
+  connection: VoiceConnectionLike;
   isRecording: boolean;
   guild?: Guild;
   thread?: PublicThreadChannel<boolean>;
@@ -38,7 +38,7 @@ export interface SetVoiceRuntimeStateInput {
   threadId: string;
   sessionId: string;
   voiceChannelId: string;
-  connection: VoiceConnection;
+  connection: VoiceConnectionLike;
   isRecording?: boolean;
 }
 
@@ -47,7 +47,7 @@ export interface CreateGuildVoiceRuntimeInput {
   thread: PublicThreadChannel<boolean>;
   session: GuildVoiceSessionRef;
   voiceChannel: VoiceBasedChannel;
-  connection: VoiceConnection;
+  connection: VoiceConnectionLike;
   recording?: Partial<GuildVoiceRecordingState>;
 }
 
@@ -73,7 +73,7 @@ export interface VoiceRuntimeRegistry {
 
 function requireIdentifier(
   name: 'guildId' | 'threadId' | 'sessionId' | 'voiceChannelId',
-  value: string,
+  value: string
 ): string {
   const normalizedValue = value.trim();
 
@@ -84,7 +84,7 @@ function requireIdentifier(
   return normalizedValue;
 }
 
-function requireConnection(connection: VoiceConnection): VoiceConnection {
+function requireConnection(connection: VoiceConnectionLike): VoiceConnectionLike {
   if (typeof connection !== 'object' || connection === null) {
     throw new RuntimeError('connection must be provided');
   }
@@ -100,7 +100,9 @@ function requireObject<Value>(name: string, value: Value | null | undefined): Va
   return value;
 }
 
-function isLegacyRuntimeInput(runtime: SetVoiceRuntimeInput): runtime is CreateGuildVoiceRuntimeInput {
+function isLegacyRuntimeInput(
+  runtime: SetVoiceRuntimeInput
+): runtime is CreateGuildVoiceRuntimeInput {
   return 'guild' in runtime;
 }
 
@@ -155,10 +157,10 @@ function requireGuildVoiceRuntime(runtime: VoiceRuntimeState | null): GuildVoice
   }
 
   if (
-    runtime.guild === undefined
-    || runtime.thread === undefined
-    || runtime.session === undefined
-    || runtime.voiceChannel === undefined
+    runtime.guild === undefined ||
+    runtime.thread === undefined ||
+    runtime.session === undefined ||
+    runtime.voiceChannel === undefined
   ) {
     throw new RuntimeError('Guild voice runtime is missing managed Discord objects.');
   }
@@ -220,8 +222,8 @@ export function createVoiceRuntimeRegistry(): VoiceRuntimeRegistry {
       const existingGuildIdForThread = guildIdByThreadId.get(normalizedRuntime.threadId);
 
       if (
-        existingGuildIdForThread !== undefined
-        && existingGuildIdForThread !== normalizedRuntime.guildId
+        existingGuildIdForThread !== undefined &&
+        existingGuildIdForThread !== normalizedRuntime.guildId
       ) {
         removeStoredRuntime(existingGuildIdForThread);
       }
@@ -253,7 +255,10 @@ export function createVoiceRuntimeRegistry(): VoiceRuntimeRegistry {
       const runtime = runtimesByGuildId.get(normalizedGuildId);
 
       if (runtime === undefined) {
-        throw new RuntimeError(`No active voice runtime exists for guild "${normalizedGuildId}".`, 404);
+        throw new RuntimeError(
+          `No active voice runtime exists for guild "${normalizedGuildId}".`,
+          404
+        );
       }
 
       const updatedRuntime: VoiceRuntimeState = {

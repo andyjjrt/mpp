@@ -145,11 +145,19 @@ function createSpeakerState(userId: string, atMs: number): SpeakerBufferState {
   };
 }
 
-function shouldFlushForSilence(state: SpeakerBufferState, atMs: number, silenceTimeoutMs: number): boolean {
+function shouldFlushForSilence(
+  state: SpeakerBufferState,
+  atMs: number,
+  silenceTimeoutMs: number
+): boolean {
   return atMs - state.lastVoiceAt >= silenceTimeoutMs;
 }
 
-function shouldFlushForMaxUtterance(state: SpeakerBufferState, atMs: number, maxUtteranceMs: number): boolean {
+function shouldFlushForMaxUtterance(
+  state: SpeakerBufferState,
+  atMs: number,
+  maxUtteranceMs: number
+): boolean {
   return atMs - state.startedAt >= maxUtteranceMs;
 }
 
@@ -157,7 +165,7 @@ function flushStoredSpeaker(
   speakers: Map<string, SpeakerBufferState>,
   userId: string,
   flushedAt: number,
-  reason: VoiceSegmentFlushReason,
+  reason: VoiceSegmentFlushReason
 ): VoiceSegment | null {
   const state = speakers.get(userId);
 
@@ -191,11 +199,11 @@ function flushStoredSpeaker(
 export function createVoiceSegmenter(options: CreateVoiceSegmenterOptions): VoiceSegmenter {
   const silenceTimeoutMs = requireDuration(
     'silenceTimeoutMs',
-    options.silenceTimeoutMs ?? DEFAULT_SEGMENT_SILENCE_TIMEOUT_MS,
+    options.silenceTimeoutMs ?? DEFAULT_SEGMENT_SILENCE_TIMEOUT_MS
   );
   const maxUtteranceMs = requireDuration(
     'maxUtteranceMs',
-    options.maxUtteranceMs ?? DEFAULT_SEGMENT_MAX_UTTERANCE_MS,
+    options.maxUtteranceMs ?? DEFAULT_SEGMENT_MAX_UTTERANCE_MS
   );
   const now = options.now ?? Date.now;
   const onSegment = options.onSegment;
@@ -237,7 +245,11 @@ export function createVoiceSegmenter(options: CreateVoiceSegmenterOptions): Voic
     }
   }
 
-  function flushSingleSpeaker(userId: string, atMs: number, reason: VoiceSegmentFlushReason): VoiceSegment | null {
+  function flushSingleSpeaker(
+    userId: string,
+    atMs: number,
+    reason: VoiceSegmentFlushReason
+  ): VoiceSegment | null {
     clearSpeakerTimeouts(userId);
     return flushStoredSpeaker(speakers, userId, atMs, reason);
   }
@@ -328,7 +340,10 @@ export function createVoiceSegmenter(options: CreateVoiceSegmenterOptions): Voic
       const segments: VoiceSegment[] = [];
       const existingSpeaker = speakers.get(userId);
 
-      if (existingSpeaker !== undefined && shouldFlushForMaxUtterance(existingSpeaker, atMs, maxUtteranceMs)) {
+      if (
+        existingSpeaker !== undefined &&
+        shouldFlushForMaxUtterance(existingSpeaker, atMs, maxUtteranceMs)
+      ) {
         const flushedSegment = flushSingleSpeaker(userId, atMs, 'max_utterance');
 
         if (flushedSegment !== null) {
