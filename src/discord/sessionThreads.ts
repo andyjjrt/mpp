@@ -25,7 +25,7 @@ function validateReplyContent(content: string): string {
   if (content.length > DISCORD_MESSAGE_CONTENT_MAX_LENGTH) {
     throw new RuntimeError(
       `content must be ${DISCORD_MESSAGE_CONTENT_MAX_LENGTH} characters or fewer`,
-      400,
+      400
     );
   }
 
@@ -34,7 +34,7 @@ function validateReplyContent(content: string): string {
 
 export async function createSessionThreadFromMessage(
   message: Message<true>,
-  title: string,
+  title: string
 ): Promise<PublicThreadChannel<false>> {
   const normalizedTitle = normalizeThreadTitle(title);
 
@@ -42,17 +42,22 @@ export async function createSessionThreadFromMessage(
     return await message.startThread({ name: normalizedTitle });
   } catch (error) {
     throw new RuntimeError(
-      `Failed to create session thread "${normalizedTitle}" from message "${message.id}": ${toError(error).message}`,
+      `Failed to create session thread "${normalizedTitle}" from message "${message.id}": ${toError(error).message}`
     );
   }
 }
 
-export async function replyInThread(thread: AnyThreadChannel, content: string): Promise<Message<true>> {
+export async function replyInThread(
+  thread: AnyThreadChannel,
+  content: string
+): Promise<Message<true>> {
   const validatedContent = validateReplyContent(content);
 
   try {
     return await thread.send(validatedContent);
   } catch (error) {
-    throw new RuntimeError(`Failed to send a reply in thread "${thread.id}": ${toError(error).message}`);
+    throw new RuntimeError(
+      `Failed to send a reply in thread "${thread.id}": ${toError(error).message}`
+    );
   }
 }
