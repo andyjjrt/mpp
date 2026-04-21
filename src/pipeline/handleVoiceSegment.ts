@@ -59,21 +59,26 @@ async function getThreadFromSegment(segment: VoiceReceiverSegment): Promise<AnyT
       return runtimeThread;
     }
 
-    throw new RuntimeError(`Thread runtime channel ${segment.threadId} is missing for guild ${segment.guildId}`);
+    throw new RuntimeError(
+      `Thread runtime channel ${segment.threadId} is missing for guild ${segment.guildId}`
+    );
   } catch (error) {
     if (error instanceof RuntimeError) {
       throw error;
     }
 
-    throw new RuntimeError(`Failed to resolve runtime thread ${segment.threadId}: ${toError(error).message}`);
+    throw new RuntimeError(
+      `Failed to resolve runtime thread ${segment.threadId}: ${toError(error).message}`
+    );
   }
 }
 
 export async function handleVoiceSegment(
   dependencies: HandleVoiceSegmentDependencies,
-  segment: VoiceReceiverSegment,
+  segment: VoiceReceiverSegment
 ): Promise<HandleVoiceSegmentResult | null> {
-  const sourceSampleRateHz = dependencies.sourceSampleRateHz ?? DEFAULT_VOICE_SEGMENT_SAMPLE_RATE_HZ;
+  const sourceSampleRateHz =
+    dependencies.sourceSampleRateHz ?? DEFAULT_VOICE_SEGMENT_SAMPLE_RATE_HZ;
   const runtime = guildVoiceRuntimes.get(segment.guildId);
 
   if (runtime === null) {
@@ -98,7 +103,7 @@ export async function handleVoiceSegment(
         threadId: segment.threadId,
         chunkCount: segment.chunkCount,
       },
-      'Failed to normalize voice segment audio to WAV',
+      'Failed to normalize voice segment audio to WAV'
     );
     return null;
   }
@@ -120,7 +125,7 @@ export async function handleVoiceSegment(
         errorCode: asrError?.code,
         message: asrError?.message ?? toError(error).message,
       },
-      'Discarding voice segment due ASR failure',
+      'Discarding voice segment due ASR failure'
     );
     return null;
   }
@@ -132,7 +137,7 @@ export async function handleVoiceSegment(
         threadId: segment.threadId,
         userId: segment.userId,
       },
-      'Discarding voice segment due empty transcript',
+      'Discarding voice segment due empty transcript'
     );
     return null;
   }
@@ -148,7 +153,7 @@ export async function handleVoiceSegment(
     {
       thread,
       text: promptText,
-    },
+    }
   );
 
   return {

@@ -1,7 +1,11 @@
 import { joinVoiceChannel } from '@discordjs/voice';
 import type { VoiceBasedChannel } from 'discord.js';
 
-import { assertManagedSessionThread, type ManagedSessionThreadContext } from '../discord/threadGuards.js';
+import {
+  assertBoundManagedSessionThread,
+  assertManagedSessionThread,
+  type ManagedSessionThreadContext,
+} from '../discord/threadGuards.js';
 import { RuntimeError } from '../utils/errors.js';
 import { stopGuildVoiceReceiver } from './receiver.js';
 import { guildVoiceRuntimes } from './runtime.js';
@@ -52,36 +56,19 @@ function requireUserId(userId: string): string {
   return normalizedUserId;
 }
 
-function resolveManagedSessionThread(
-  threadSessionRepo: ThreadSessionRepo,
-  context: ManagedSessionThreadContext,
-): { sessionId: string; thread: ReturnType<typeof assertManagedSessionThread> } {
-  const thread = assertManagedSessionThread(context);
-  const sessionId = threadSessionRepo.findSessionId(thread.id);
-
-  if (sessionId === null) {
-    throw new RuntimeError('This action must be used inside a managed session thread.', 400);
-  }
-
-  return {
-    sessionId,
-    thread,
-  };
-}
-
 function isVoiceBasedChannel(channel: unknown): channel is VoiceBasedChannel {
   return (
-    typeof channel === 'object'
-    && channel !== null
-    && 'isVoiceBased' in channel
-    && typeof channel.isVoiceBased === 'function'
-    && channel.isVoiceBased()
+    typeof channel === 'object' &&
+    channel !== null &&
+    'isVoiceBased' in channel &&
+    typeof channel.isVoiceBased === 'function' &&
+    channel.isVoiceBased()
   );
 }
 
 async function resolveUserVoiceChannel(
   thread: ReturnType<typeof assertManagedSessionThread>,
-  userId: string,
+  userId: string
 ): Promise<VoiceBasedChannel> {
   const voiceState = await thread.guild.voiceStates.fetch(requireUserId(userId));
   const voiceChannel = voiceState.channel;
@@ -95,9 +82,12 @@ async function resolveUserVoiceChannel(
 
 export async function joinGuildVoiceRuntime(
   dependencies: JoinGuildVoiceRuntimeDependencies,
-  options: JoinGuildVoiceRuntimeOptions,
+  options: JoinGuildVoiceRuntimeOptions
 ): Promise<JoinGuildVoiceRuntimeResult> {
-  const { sessionId, thread } = resolveManagedSessionThread(dependencies.threadSessionRepo, options.context);
+  const { sessionId, thread } = assertBoundManagedSessionThread(
+    dependencies.threadSessionRepo,
+    options.context
+  );
   const existingRuntime = guildVoiceRuntimes.get(thread.guild.id);
 
   if (existingRuntime !== null) {
@@ -139,9 +129,12 @@ export async function joinGuildVoiceRuntime(
 
 export async function leaveGuildVoiceRuntime(
   dependencies: LeaveGuildVoiceRuntimeDependencies,
-  options: LeaveGuildVoiceRuntimeOptions,
+  options: LeaveGuildVoiceRuntimeOptions
 ): Promise<LeaveGuildVoiceRuntimeResult> {
-  const { sessionId, thread } = resolveManagedSessionThread(dependencies.threadSessionRepo, options.context);
+  const { sessionId, thread } = assertBoundManagedSessionThread(
+    dependencies.threadSessionRepo,
+    options.context
+  );
   const runtime = guildVoiceRuntimes.get(thread.guild.id);
 
   if (runtime === null || runtime.thread.id !== thread.id) {

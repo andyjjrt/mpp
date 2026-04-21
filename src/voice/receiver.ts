@@ -1,6 +1,7 @@
-import { EndBehaviorType, type AudioReceiveStream } from '@discordjs/voice';
+import { EndBehaviorType } from '@discordjs/voice';
 
 import { RuntimeError, toError } from '../utils/errors.js';
+import type { AudioReceiveStreamLike } from './transport.js';
 import {
   DEFAULT_SEGMENT_MAX_UTTERANCE_MS,
   DEFAULT_SEGMENT_SILENCE_TIMEOUT_MS,
@@ -42,7 +43,7 @@ interface ActiveGuildVoiceReceiver {
   controller: GuildVoiceReceiverController;
   runtime: VoiceRuntimeState;
   segmenter: VoiceSegmenter;
-  subscriptions: Map<string, AudioReceiveStream>;
+  subscriptions: Map<string, AudioReceiveStreamLike>;
   speakingStartListener: (userId: string) => void;
   stopped: boolean;
 }
@@ -73,7 +74,7 @@ function updateRecordingState(
   runtimes: VoiceRuntimeRegistry,
   guildId: string,
   isRecording: boolean,
-  onError?: StartGuildVoiceReceiverOptions['onError'],
+  onError?: StartGuildVoiceReceiverOptions['onError']
 ): void {
   try {
     runtimes.updateRecordingState(guildId, isRecording);
@@ -87,14 +88,14 @@ function updateRecordingState(
   }
 }
 
-function destroySubscription(stream: AudioReceiveStream): void {
+function destroySubscription(stream: AudioReceiveStreamLike): void {
   if (!stream.destroyed) {
     stream.destroy();
   }
 }
 
 export function startGuildVoiceReceiver(
-  options: StartGuildVoiceReceiverOptions,
+  options: StartGuildVoiceReceiverOptions
 ): GuildVoiceReceiverController {
   const guildId = requireGuildId(options.guildId);
   const runtimes = options.runtimes ?? voiceRuntimes;
@@ -118,7 +119,7 @@ export function startGuildVoiceReceiver(
     },
   });
 
-  const subscriptions = new Map<string, AudioReceiveStream>();
+  const subscriptions = new Map<string, AudioReceiveStreamLike>();
 
   function subscribeToSpeaker(speakerId: string): void {
     const normalizedSpeakerId = speakerId.trim();
@@ -192,7 +193,10 @@ export function startGuildVoiceReceiver(
   return activeReceiver.controller;
 }
 
-export function stopGuildVoiceReceiver(guildId: string, runtimes: VoiceRuntimeRegistry = voiceRuntimes): void {
+export function stopGuildVoiceReceiver(
+  guildId: string,
+  runtimes: VoiceRuntimeRegistry = voiceRuntimes
+): void {
   const normalizedGuildId = requireGuildId(guildId);
   const activeReceiver = activeReceivers.get(normalizedGuildId);
 
@@ -202,7 +206,10 @@ export function stopGuildVoiceReceiver(guildId: string, runtimes: VoiceRuntimeRe
 
   activeReceiver.stopped = true;
   activeReceivers.delete(normalizedGuildId);
-  activeReceiver.runtime.connection.receiver.speaking.off('start', activeReceiver.speakingStartListener);
+  activeReceiver.runtime.connection.receiver.speaking.off(
+    'start',
+    activeReceiver.speakingStartListener
+  );
 
   for (const stream of activeReceiver.subscriptions.values()) {
     destroySubscription(stream);
