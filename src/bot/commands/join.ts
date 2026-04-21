@@ -1,5 +1,6 @@
-import type { ChatInputCommandInteraction } from 'discord.js';
+import { EmbedBuilder, type ChatInputCommandInteraction } from 'discord.js';
 
+import type { InteractionCommandResult } from '../events/interactionCreate.js';
 import type { AppConfig } from '../../types.js';
 import type { OpencodeSdkContext } from '../../opencode/sdk.js';
 import { handleVoiceSegment } from '../../pipeline/handleVoiceSegment.js';
@@ -8,13 +9,10 @@ import type { ThreadSessionRepo } from '../../storage/threadSessionRepo.js';
 import { RuntimeError, toError } from '../../utils/errors.js';
 import { createLogger } from '../../utils/logger.js';
 import { startGuildVoiceReceiver } from '../../voice/receiver.js';
-import {
-  joinGuildVoiceRuntime,
-  leaveGuildVoiceRuntime,
-  type JoinGuildVoiceRuntimeResult,
-} from '../../voice/joinLeave.js';
+import { joinGuildVoiceRuntime, leaveGuildVoiceRuntime } from '../../voice/joinLeave.js';
 
 const logger = createLogger({ module: 'bot' });
+const SUCCESS_EMBED_COLOR = 0x57f287;
 
 export interface JoinCommandServices {
   config: AppConfig;
@@ -26,7 +24,7 @@ export interface JoinCommandServices {
 export async function handleJoinCommand(
   services: JoinCommandServices,
   interaction: ChatInputCommandInteraction
-): Promise<JoinGuildVoiceRuntimeResult> {
+): Promise<InteractionCommandResult> {
   const result = await joinGuildVoiceRuntime(
     {
       threadSessionRepo: services.threadSessionRepo,
@@ -38,7 +36,7 @@ export async function handleJoinCommand(
   );
 
   try {
-    startGuildVoiceReceiver({
+    await startGuildVoiceReceiver({
       guildId: result.guildId,
       onSegment: (segment) => {
         void services.threadTaskQueue
@@ -96,5 +94,18 @@ export async function handleJoinCommand(
     throw new RuntimeError(`Failed to start voice receiver: ${toError(error).message}`);
   }
 
-  return result;
+  const successEmbed = new EmbedBuilder()
+    .setColor(SUCCESS_EMBED_COLOR)
+    .setTitle('🎙️ Joined Voice Channel')
+    .setDescription(
+      'Just speak normally. After a short pause, I will transcribe your speech and reply in this thread.\n\n' +
+        '• No button needed\n' +
+        '• Pause briefly when done\n' +
+        '• Use `/leave` to stop voice mode'
+    );
+
+  return {
+    message: result.message,
+    embeds: [successEmbed],
+  };
 }
