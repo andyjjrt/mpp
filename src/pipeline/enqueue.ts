@@ -1,4 +1,7 @@
 import { RuntimeError } from '../utils/errors.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger({ module: 'enqueue' });
 
 export interface ThreadTaskQueue {
   enqueue<Result>(threadId: string, task: () => Promise<Result>): Promise<Result>;
@@ -37,19 +40,49 @@ export function createThreadTaskQueue(): ThreadTaskQueue {
       releaseCurrentTail = resolve;
     });
 
+    const previousSize = queue.size;
     queue.size += 1;
     queue.tail = currentTail;
     queues.set(normalizedThreadId, queue);
 
+    const enqueueTime = Date.now();
+    logger.debug(
+      { threadId: normalizedThreadId, queueSize: queue.size, previousSize },
+      'Queue task enqueued'
+    );
+
     try {
+      const waitStart = Date.now();
       await previousTail;
-      return await task();
+      const waitDuration = Date.now() - waitStart;
+      if (waitDuration > 100) {
+        logger.debug(
+          { threadId: normalizedThreadId, waitDurationMs: waitDuration, previousSize },
+          'Queue waited for previous task'
+        );
+      }
+      const taskStart = Date.now();
+      const result = await task();
+      const taskDuration = Date.now() - taskStart;
+      logger.debug(
+        {
+          threadId: normalizedThreadId,
+          taskDurationMs: taskDuration,
+          totalDurationMs: Date.now() - enqueueTime,
+        },
+        'Queue task completed'
+      );
+      return result;
     } finally {
       releaseCurrentTail();
       queue.size -= 1;
 
       if (queue.size === 0 && queues.get(normalizedThreadId) === queue) {
         queues.delete(normalizedThreadId);
+        logger.debug(
+          { threadId: normalizedThreadId, totalDurationMs: Date.now() - enqueueTime },
+          'Queue emptied'
+        );
       }
     }
   }
