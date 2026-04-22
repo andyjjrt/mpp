@@ -1,3 +1,6 @@
+import type { APIMessageTopLevelComponent } from 'discord-api-types/v10';
+
+import type { OpencodeSdkContext } from '../opencode/sdk.js';
 import type {
   AssistantErrorPart,
   AssistantOutputPart,
@@ -8,10 +11,12 @@ import type {
   AssistantToolResultPart,
   AssistantUnknownPart,
 } from '../opencode/parts.js';
+import { renderQuestionToolCallPart } from './questionUi.js';
 
 export type RenderedDiscordPartKind =
   | 'text'
   | 'reasoning'
+  | 'question'
   | 'tool_call'
   | 'tool_result'
   | 'error'
@@ -23,6 +28,8 @@ export interface RenderedDiscordPart {
   kind: RenderedDiscordPartKind;
   label: string;
   content: string;
+  components?: readonly APIMessageTopLevelComponent[];
+  usesComponentsV2?: boolean;
 }
 
 const EMPTY_REASONING_FALLBACK = '_(assistant reasoning output was empty)_';
@@ -106,12 +113,21 @@ function renderReasoningPart(part: AssistantReasoningPart): RenderedDiscordPart 
   };
 }
 
-function renderToolCallPart(part: AssistantToolCallPart): RenderedDiscordPart {
+async function renderToolCallPart(
+  context: OpencodeSdkContext,
+  part: AssistantToolCallPart
+): Promise<RenderedDiscordPart> {
+  const questionPart = await renderQuestionToolCallPart(context, part);
+
+  if (questionPart !== null) {
+    return questionPart;
+  }
+
   const timestamp = part.startTime ? ` (<t:${Math.floor(part.startTime / 1000)}:R>)` : '';
   const content = `> :wrench: **${part.tool}** ${part.title ?? ''}${timestamp}`;
   return {
     id: part.id,
-    kind: 'tool_call',
+    kind: part.type as RenderedDiscordPartKind,
     label: 'Tool call',
     content,
   };
@@ -184,14 +200,17 @@ function renderPatchPart(part: AssistantPatchPart): RenderedDiscordPart {
   };
 }
 
-export function renderAssistantPart(part: AssistantOutputPart): RenderedDiscordPart | null {
+export async function renderAssistantPart(
+  context: OpencodeSdkContext,
+  part: AssistantOutputPart
+): Promise<RenderedDiscordPart | null> {
   switch (part.type) {
     case 'text':
       return renderTextPart(part);
     case 'reasoning':
       return renderReasoningPart(part);
     case 'tool_call':
-      return renderToolCallPart(part);
+      return await renderToolCallPart(context, part);
     case 'tool_result':
       return renderToolResultPart(part);
     case 'error':

@@ -1,11 +1,12 @@
-import { EmbedBuilder, type AnyThreadChannel, type Message } from 'discord.js';
+import { EmbedBuilder, MessageFlags, type AnyThreadChannel, type Message } from 'discord.js';
+import type { APIMessageTopLevelComponent } from 'discord-api-types/v10';
 
 import type { AssistantOutputPart } from '../opencode/parts.js';
+import type { OpencodeSdkContext } from '../opencode/sdk.js';
 import { RuntimeError, toError } from '../utils/errors.js';
 import { splitDiscordMessage } from './messageSplitter.js';
 import { renderAssistantPart } from './partRenderer.js';
 import type { RenderedDiscordPart } from './partRenderer.js';
-
 const EMPTY_ASSISTANT_OUTPUT_FALLBACK = '**Assistant**\n_(assistant returned no output parts)_';
 const DISCORD_TYPING_REFRESH_INTERVAL_MS = 9000;
 
@@ -54,12 +55,54 @@ function getContentChunks(content: string): string[] {
   return splitDiscordMessage(normalizedContent);
 }
 
-async function sendContentChunk(thread: AnyThreadChannel, chunk: string): Promise<Message<true>> {
+interface DiscordMessageChunk {
+  content: string;
+  components?: readonly APIMessageTopLevelComponent[];
+  usesComponentsV2?: boolean;
+}
+
+function getRenderedPartChunks(renderedPart: RenderedDiscordPart): DiscordMessageChunk[] {
+  const contentChunks = getContentChunks(renderedPart.content);
+
+  if (renderedPart.components === undefined) {
+    return contentChunks.map((content) => ({ content }));
+  }
+
+  if (contentChunks.length > 1) {
+    throw new RuntimeError(
+      'Interactive assistant replies must fit within a single Discord message.'
+    );
+  }
+
+  const [content = ''] = contentChunks;
+
+  return [
+    {
+      content,
+      components: renderedPart.components,
+      usesComponentsV2: renderedPart.usesComponentsV2,
+    },
+  ];
+}
+
+async function sendContentChunk(
+  thread: AnyThreadChannel,
+  chunk: DiscordMessageChunk
+): Promise<Message<true>> {
   try {
-    return await thread.send({
-      content: chunk,
-      allowedMentions: { parse: [] },
-    });
+    return await thread.send(
+      chunk.usesComponentsV2
+        ? {
+            components: chunk.components,
+            flags: MessageFlags.IsComponentsV2,
+            allowedMentions: { parse: [] },
+          }
+        : {
+            content: chunk.content,
+            components: chunk.components,
+            allowedMentions: { parse: [] },
+          }
+    );
   } catch (error) {
     throw new RuntimeError(
       `Failed to send a message in thread ${thread.id}: ${toError(error).message}`
@@ -86,13 +129,23 @@ async function sendEmbedChunk(
 async function editContentChunk(
   thread: AnyThreadChannel,
   message: Message<true>,
-  chunk: string
+  chunk: DiscordMessageChunk
 ): Promise<Message<true>> {
   try {
-    return await message.edit({
-      content: chunk,
-      allowedMentions: { parse: [] },
-    });
+    return await message.edit(
+      chunk.usesComponentsV2
+        ? {
+            content: null,
+            components: chunk.components ?? [],
+            flags: MessageFlags.IsComponentsV2,
+            allowedMentions: { parse: [] },
+          }
+        : {
+            content: chunk.content,
+            components: chunk.components ?? [],
+            allowedMentions: { parse: [] },
+          }
+    );
   } catch (error) {
     throw new RuntimeError(
       `Failed to edit a message in thread ${thread.id}: ${toError(error).message}`
@@ -112,9 +165,18 @@ async function deleteContentChunk(thread: AnyThreadChannel, message: Message<tru
 
 async function sendContentChunks(
   thread: AnyThreadChannel,
-  content: string
+  content: string,
+  components?: readonly APIMessageTopLevelComponent[],
+  usesComponentsV2?: boolean
 ): Promise<Message<true>[]> {
-  const chunks = getContentChunks(content);
+  const chunks = getRenderedPartChunks({
+    id: 'standalone-reply',
+    kind: 'text',
+    label: 'Assistant',
+    content,
+    components,
+    usesComponentsV2,
+  });
   const replies: Message<true>[] = [];
 
   for (const chunk of chunks) {
@@ -178,6 +240,7 @@ export function createThreadTypingSession(thread: AnyThreadChannel): ThreadTypin
 }
 
 export async function upsertAssistantReplyPart(
+  opencodeContext: OpencodeSdkContext,
   thread: AnyThreadChannel,
   part: AssistantOutputPart,
   previous?: SentDiscordPart
@@ -189,19 +252,51 @@ export async function upsertAssistantReplyPart(
     return null;
   }
 
-  const renderedPart = renderAssistantPart(part);
+  const renderedPart = await renderAssistantPart(opencodeContext, part);
 
   if (renderedPart === null) {
     return null;
   }
 
   if (previous === undefined) {
-    const messages = await sendContentChunks(thread, renderedPart.content);
+    const messages = await sendContentChunks(
+      thread,
+      renderedPart.content,
+      renderedPart.components,
+      renderedPart.usesComponentsV2
+    );
     return { renderedPart, messages };
   }
 
-  const nextChunks = getContentChunks(renderedPart.content);
+  const nextChunks = getRenderedPartChunks(renderedPart);
   const updatedMessages: Message<true>[] = [];
+
+  if (previous.renderedPart.components !== undefined || renderedPart.components !== undefined) {
+    const [previousMessage] = previous.messages;
+    const [nextChunk] = nextChunks;
+
+    if (previousMessage === undefined || nextChunk === undefined) {
+      throw new RuntimeError('Failed to reconcile an interactive assistant reply');
+    }
+
+    updatedMessages.push(await editContentChunk(thread, previousMessage, nextChunk));
+
+    for (let index = 1; index < previous.messages.length; index += 1) {
+      const previousMessageChunk = previous.messages[index];
+
+      if (previousMessageChunk === undefined) {
+        throw new RuntimeError('Failed to prune an interactive assistant reply');
+      }
+
+      await deleteContentChunk(thread, previousMessageChunk);
+    }
+
+    return {
+      renderedPart,
+      messages: updatedMessages,
+    };
+  }
+
   const sharedChunkCount = Math.min(previous.messages.length, nextChunks.length);
 
   for (let index = 0; index < sharedChunkCount; index += 1) {
@@ -212,7 +307,7 @@ export async function upsertAssistantReplyPart(
       throw new RuntimeError('Failed to reconcile assistant reply chunks');
     }
 
-    if (previousMessage.content === nextChunk) {
+    if (previousMessage.content === nextChunk.content) {
       updatedMessages.push(previousMessage);
       continue;
     }
@@ -272,6 +367,7 @@ export async function sendEmbedRepliesToThread(
 }
 
 export async function sendAssistantReplies(
+  opencodeContext: OpencodeSdkContext,
   thread: AnyThreadChannel,
   parts: readonly AssistantOutputPart[]
 ): Promise<SentDiscordPart[]> {
@@ -300,7 +396,7 @@ export async function sendAssistantReplies(
 
       typingSession.stop();
 
-      const sentPart = await upsertAssistantReplyPart(thread, part);
+      const sentPart = await upsertAssistantReplyPart(opencodeContext, thread, part);
 
       if (sentPart !== null) {
         sentParts.push(sentPart);

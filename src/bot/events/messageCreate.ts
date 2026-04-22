@@ -44,6 +44,10 @@ function isBotAuthoredMessage(message: Message): boolean {
   return message.author.bot || message.webhookId !== null;
 }
 
+function isIgnoredMessage(message: Message): boolean {
+  return message.content.trimStart().startsWith('!');
+}
+
 async function resolveSessionThreadFromMessage(
   message: Message<true>,
   title: string
@@ -215,6 +219,10 @@ async function handleDiscordMessage(
   message: Message
 ): Promise<void> {
   if (isBotAuthoredMessage(message) || !message.inGuild()) {
+    return;
+  }
+
+  if (isIgnoredMessage(message)) {
     return;
   }
 

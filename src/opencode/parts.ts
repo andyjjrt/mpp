@@ -7,6 +7,9 @@ import type {
 } from '@opencode-ai/sdk';
 
 import { RuntimeError } from '../utils/errors.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger({ module: 'opencode:parts' });
 
 export interface AssistantPartBase {
   id: string;
@@ -38,6 +41,29 @@ export interface AssistantToolCallPart extends AssistantPartBase {
   rawInput: string;
   title?: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface AssistantQuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface AssistantQuestionInfo {
+  question: string;
+  header: string;
+  options: readonly AssistantQuestionOption[];
+  multiple: boolean;
+  custom: boolean;
+}
+
+export interface AssistantQuestionToolCall {
+  requestId?: string;
+  sessionId: string;
+  toolMessageId: string;
+  questionId?: string;
+  callId: string;
+  tool: string;
+  questions: readonly AssistantQuestionInfo[];
 }
 
 export interface AssistantToolResultPart extends AssistantPartBase {
@@ -116,6 +142,109 @@ function requireNonEmptyString(name: string, value: string): string {
 
 function toRecord(value: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   return value === undefined ? undefined : { ...value };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isQuestionOption(value: AssistantQuestionOption | null): value is AssistantQuestionOption {
+  return value !== null;
+}
+
+function isQuestionInfo(value: AssistantQuestionInfo | null): value is AssistantQuestionInfo {
+  return value !== null;
+}
+
+function parseQuestionOption(value: unknown): AssistantQuestionOption | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const label = typeof value.label === 'string' ? value.label.trim() : '';
+  const description = typeof value.description === 'string' ? value.description.trim() : '';
+
+  if (label.length === 0 || description.length === 0) {
+    return null;
+  }
+
+  return {
+    label,
+    description,
+  };
+}
+
+function parseQuestionInfo(value: unknown): AssistantQuestionInfo | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const question = typeof value.question === 'string' ? value.question.trim() : '';
+  const header = typeof value.header === 'string' ? value.header.trim() : '';
+  const parsedOptions = Array.isArray(value.options)
+    ? value.options.map((option) => parseQuestionOption(option))
+    : [];
+
+  if (question.length === 0 || header.length === 0 || parsedOptions.length === 0) {
+    return null;
+  }
+
+  if (parsedOptions.some((option) => option === null)) {
+    return null;
+  }
+
+  const options = parsedOptions.filter(isQuestionOption);
+
+  return {
+    question,
+    header,
+    options,
+    multiple: typeof value.multiple === 'boolean' ? value.multiple : false,
+    custom: typeof value.custom === 'boolean' ? value.custom : true,
+  };
+}
+
+function parseQuestionPayload(value: unknown): {
+  requestId?: string;
+  questions: readonly AssistantQuestionInfo[];
+} | null {
+  if (!isRecord(value) || !Array.isArray(value.questions) || value.questions.length === 0) {
+    return null;
+  }
+
+  const parsedQuestions = value.questions.map((question) => parseQuestionInfo(question));
+
+  if (parsedQuestions.some((question) => question === null)) {
+    return null;
+  }
+
+  const questions = parsedQuestions.filter(isQuestionInfo);
+  const requestIdCandidates = [value.id, value.requestId, value.requestID];
+  const requestId = requestIdCandidates.find(
+    (candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0
+  );
+
+  return {
+    requestId: requestId?.trim(),
+    questions,
+  };
+}
+
+function parseRawQuestionPayload(rawInput: string): {
+  requestId?: string;
+  questions: readonly AssistantQuestionInfo[];
+} | null {
+  const normalizedRawInput = rawInput.trim();
+
+  if (normalizedRawInput.length === 0) {
+    return null;
+  }
+
+  try {
+    return parseQuestionPayload(JSON.parse(normalizedRawInput));
+  } catch {
+    return null;
+  }
 }
 
 function createPartBase(
@@ -303,6 +432,44 @@ export function normalizeAssistantPart(part: OpencodePart): AssistantOutputPart 
     default:
       return assertUnreachable(part);
   }
+}
+
+export function parseAssistantQuestionToolCall(
+  part: AssistantToolCallPart
+): AssistantQuestionToolCall | null {
+  const parsedPayload = parseQuestionPayload(part.input) ?? parseRawQuestionPayload(part.rawInput);
+
+  logger.debug(
+    {
+      partId: part.id,
+      callId: part.callId,
+      tool: part.tool,
+      sessionId: part.sessionId,
+      input: part.input,
+      rawInput: part.rawInput,
+      parsedRequestId: parsedPayload?.requestId,
+      parsedQuestionCount: parsedPayload?.questions.length ?? 0,
+    },
+    'Received question tool body'
+  );
+
+  if (parsedPayload === null) {
+    return null;
+  }
+
+  const result: AssistantQuestionToolCall = {
+    requestId: parsedPayload.requestId,
+    sessionId: part.sessionId,
+    toolMessageId: part.messageId,
+    questionId: undefined,
+    callId: part.callId,
+    tool: part.tool,
+    questions: parsedPayload.questions,
+  };
+
+  logger.debug({ result }, 'Parsed assistant question tool call');
+
+  return result;
 }
 
 export function normalizeAssistantError(
