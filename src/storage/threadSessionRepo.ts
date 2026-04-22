@@ -1,6 +1,6 @@
-import { RuntimeError, toError } from '../utils/errors';
+import { RuntimeError, toError } from '../utils/errors.js';
 
-import type { ThreadSessionDatabase } from './db';
+import type { ThreadSessionDatabase } from './db.js';
 
 interface ThreadSessionRow {
   session_id: string;

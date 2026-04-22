@@ -334,7 +334,10 @@ export function createVoiceSegmenter(options: CreateVoiceSegmenterOptions): Voic
       speaker.lastVoiceAt = Math.max(speaker.lastVoiceAt, atMs);
       scheduleSilenceFlush(userId);
 
-      logger.debug({ userId, chunks: speaker.chunks.length }, 'Speaker marked inactive, scheduled silence flush');
+      logger.debug(
+        { userId, chunks: speaker.chunks.length },
+        'Speaker marked inactive, scheduled silence flush'
+      );
 
       return cloneState(speaker);
     },
@@ -369,7 +372,10 @@ export function createVoiceSegmenter(options: CreateVoiceSegmenterOptions): Voic
       scheduleSilenceFlush(userId);
       scheduleMaxUtteranceFlush(userId);
 
-      logger.trace({ userId, chunkSize: chunk.length, totalChunks: speaker.chunks.length }, 'Audio chunk appended');
+      logger.trace(
+        { userId, chunkSize: chunk.length, totalChunks: speaker.chunks.length },
+        'Audio chunk appended'
+      );
 
       emitSegments(segments);
 

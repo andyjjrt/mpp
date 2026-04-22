@@ -53,6 +53,9 @@ export interface AppConfig {
   opencode: {
     apiKey?: string;
     baseUrl: string;
+    directory?: string;
+    username?: string;
+    password?: string;
   };
   asr: {
     apiKey?: string;

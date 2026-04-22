@@ -3,7 +3,7 @@
   "agents": {
     "sisyphus": {
       "model": "opencode-go/kimi-k2.5",
-      "prompt_append": "Delegate heavily to hephaestus for implementation. Parallelize exploration."
+      "prompt_append": "Always delegate to hephaestus for implementation and sisyphus-junior for tasks. Parallelize exploration."
     },
     "sisyphus-junior": {
       "model": "opencode-go/minimax-m2.7"

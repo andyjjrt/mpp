@@ -7,7 +7,7 @@ import type {
   AssistantToolCallPart,
   AssistantToolResultPart,
   AssistantUnknownPart,
-} from '../opencode/parts';
+} from '../opencode/parts.js';
 
 export type RenderedDiscordPartKind =
   | 'text'

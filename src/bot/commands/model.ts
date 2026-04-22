@@ -20,10 +20,14 @@ const ERROR_EMBED_COLOR = 0xed4245;
 const INFO_EMBED_COLOR = 0x5865f2;
 const AUTOCOMPLETE_LIMIT = 25;
 const FOOTER_PROVIDER_LIMIT = 5;
+const PROVIDER_CATALOG_CACHE_TTL_MS = 30_000;
 
 type ProviderModelSummary = { id: string; name: string };
 type ProviderSummary = { id: string; name: string; models: ProviderModelSummary[] };
 type ProviderCatalog = { providers: ProviderSummary[]; defaultModel: ThreadModelPreference | null };
+type ProviderCatalogCacheEntry = { expiresAt: number; catalog: ProviderCatalog };
+
+let providerCatalogCache: ProviderCatalogCacheEntry | null = null;
 
 export interface ModelCommandServices {
   config: AppConfig;
@@ -50,6 +54,35 @@ function requireOptionValue(name: string, value: string | null): string {
   }
 
   return normalizedValue;
+}
+
+function formatProviderModelValue(model: ThreadModelPreference): string {
+  return `${model.providerID}/${model.modelID}`;
+}
+
+function parseProviderModelValue(
+  value: string | null
+): { providerId: string; modelId: string } | null {
+  const normalizedValue = normalizeOptionalString(value);
+
+  if (normalizedValue === null) {
+    return null;
+  }
+
+  const separatorIndex = normalizedValue.indexOf('/');
+
+  if (separatorIndex <= 0 || separatorIndex === normalizedValue.length - 1) {
+    throw new RuntimeError('Model must use the format `provider/model`.', 400);
+  }
+
+  const providerId = normalizeOptionalString(normalizedValue.slice(0, separatorIndex));
+  const modelId = normalizeOptionalString(normalizedValue.slice(separatorIndex + 1));
+
+  if (providerId === null || modelId === null) {
+    throw new RuntimeError('Model must use the format `provider/model`.', 400);
+  }
+
+  return { providerId, modelId };
 }
 
 function normalizeProviderModel(input: unknown): ProviderModelSummary | null {
@@ -101,14 +134,14 @@ function resolveDefaultModel(input: unknown): ThreadModelPreference | null {
     return null;
   }
 
-  const provider = normalizeOptionalString(
+  const legacyProvider = normalizeOptionalString(
     typeof input.default.provider === 'string'
       ? input.default.provider
       : typeof input.default.providerID === 'string'
         ? input.default.providerID
         : null
   );
-  const model = normalizeOptionalString(
+  const legacyModel = normalizeOptionalString(
     typeof input.default.model === 'string'
       ? input.default.model
       : typeof input.default.modelID === 'string'
@@ -116,12 +149,29 @@ function resolveDefaultModel(input: unknown): ThreadModelPreference | null {
         : null
   );
 
-  if (provider === null || model === null) {
+  if (legacyProvider !== null && legacyModel !== null) {
+    return {
+      providerID: legacyProvider,
+      modelID: legacyModel,
+    };
+  }
+
+  const [providerEntry] = Object.entries(input.default);
+
+  if (providerEntry === undefined) {
+    return null;
+  }
+
+  const [provider, defaultModel] = providerEntry;
+  const normalizedProvider = normalizeOptionalString(provider);
+  const model = normalizeOptionalString(typeof defaultModel === 'string' ? defaultModel : null);
+
+  if (normalizedProvider === null || model === null) {
     return null;
   }
 
   return {
-    providerID: provider,
+    providerID: normalizedProvider,
     modelID: model,
   };
 }
@@ -141,6 +191,14 @@ function normalizeProviderCatalog(input: unknown): ProviderCatalog {
     providers,
     defaultModel: resolveDefaultModel(input),
   };
+}
+
+function unwrapResponseData(input: unknown): unknown {
+  if (!isRecord(input) || !('data' in input)) {
+    return input;
+  }
+
+  return input.data;
 }
 
 function summarizeProviders(providers: readonly ProviderSummary[]): string {
@@ -239,25 +297,25 @@ function assertProviderModel(provider: ProviderSummary, modelId: string): Thread
 }
 
 async function loadProviderCatalog(services: ModelCommandServices): Promise<ProviderCatalog> {
+  if (providerCatalogCache !== null && providerCatalogCache.expiresAt > Date.now()) {
+    return providerCatalogCache.catalog;
+  }
+
   const catalog = await services.opencodeContext.client.config.providers();
-  return normalizeProviderCatalog(catalog);
+  const normalizedCatalog = normalizeProviderCatalog(unwrapResponseData(catalog));
+
+  providerCatalogCache = {
+    catalog: normalizedCatalog,
+    expiresAt: Date.now() + PROVIDER_CATALOG_CACHE_TTL_MS,
+  };
+
+  return normalizedCatalog;
 }
 
 function resolveRequestedModel(
   interaction: ChatInputCommandInteraction
 ): { providerId: string; modelId: string } | null {
-  const providerId = normalizeOptionalString(interaction.options.getString('provider'));
-  const modelId = normalizeOptionalString(interaction.options.getString('model'));
-
-  if (providerId === null && modelId === null) {
-    return null;
-  }
-
-  if (providerId === null || modelId === null) {
-    throw new RuntimeError('Provide both provider and model to update the thread model.', 400);
-  }
-
-  return { providerId, modelId };
+  return parseProviderModelValue(interaction.options.getString('model'));
 }
 
 function createAutocompleteChoices(
@@ -285,36 +343,22 @@ export async function handleModelAutocomplete(
     const providers = await loadProviderCatalog(services);
     const focusedOption = interaction.options.getFocused(true);
 
-    if (focusedOption.name === 'provider') {
-      await interaction.respond(
-        createAutocompleteChoices(
-          providers.providers.map((provider) => ({
-            label: `${provider.name} (${provider.id})`,
-            value: provider.id,
-          })),
-          focusedOption.value
-        )
-      );
-      return;
-    }
-
     if (focusedOption.name === 'model') {
-      // Get the provider value from autocomplete options data
-      const providerOption = interaction.options.data.find((opt) => opt.name === 'provider');
-      const providerId = providerOption?.value
-        ? normalizeOptionalString(String(providerOption.value))
-        : null;
-      const provider =
-        providerId === null
-          ? null
-          : providers.providers.find((candidate) => candidate.id === providerId);
-
       await interaction.respond(
         createAutocompleteChoices(
-          provider?.models.map((model) => ({
-            label: `${model.name} (${model.id})`,
-            value: model.id,
-          })) ?? [],
+          providers.providers.flatMap((provider) =>
+            provider.models.map((model) => {
+              const value = formatProviderModelValue({
+                providerID: provider.id,
+                modelID: model.id,
+              });
+
+              return {
+                label: `${model.name} (${value})`,
+                value,
+              };
+            })
+          ),
           focusedOption.value
         )
       );

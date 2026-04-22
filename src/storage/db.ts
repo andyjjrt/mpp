@@ -1,7 +1,8 @@
+import { Database as BunDatabase } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { RuntimeError, toError } from '../utils/errors';
+import { RuntimeError, toError } from '../utils/errors.js';
 
 export interface SqliteStatement<Row = unknown> {
   run(...parameters: readonly unknown[]): unknown;
@@ -25,10 +26,6 @@ interface BunSqliteDatabase {
   query<Row = unknown>(source: string): BunSqliteStatement<Row>;
   close(): void;
 }
-
-const { Database: BunDatabase } = require('bun:sqlite') as {
-  Database: new (filename: string) => BunSqliteDatabase;
-};
 
 const THREAD_SESSIONS_SCHEMA =
   'CREATE TABLE IF NOT EXISTS thread_sessions (thread_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, first_user_id TEXT NULL, model_provider_id TEXT NULL, model_id TEXT NULL, agent_name TEXT NULL);';

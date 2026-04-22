@@ -1,6 +1,7 @@
+import { Database as BunDatabase } from 'bun:sqlite';
 import { expect, test, describe, beforeEach, afterEach } from 'bun:test';
-import { initializeDatabase } from '../../src/storage/db';
-import { createThreadSessionRepo } from '../../src/storage/threadSessionRepo';
+import { initializeDatabase } from '../../src/storage/db.js';
+import { createThreadSessionRepo } from '../../src/storage/threadSessionRepo.js';
 import { unlinkSync, existsSync } from 'node:fs';
 
 describe('Database Schema & Repository Preferences', () => {
@@ -86,7 +87,6 @@ describe('Database Schema & Repository Preferences', () => {
 
     try {
       // 1. Create DB with old schema manually
-      const BunDatabase = require('bun:sqlite').Database;
       const rawDb = new BunDatabase(PERSISTENT_DB);
       rawDb.exec(`
         CREATE TABLE thread_sessions (

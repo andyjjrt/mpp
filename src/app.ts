@@ -1,17 +1,17 @@
-import './bun-polyfills';
+import './bun-polyfills.js';
 import { join } from 'node:path';
 
 import { Client, Events } from 'discord.js';
 
-import { createDiscordClient, registerBotEventHandlers, type BotServices } from './bot/client';
-import { loadConfig } from './config';
-import { createOpencodeSdkContext } from './opencode/sdk';
-import { createThreadTaskQueue } from './pipeline/enqueue';
-import { initializeDatabase, type ThreadSessionDatabase } from './storage/db';
-import { createThreadSessionRepo } from './storage/threadSessionRepo';
-import { toError } from './utils/errors';
-import { createLogger, setLoggerLevel } from './utils/logger';
-import { now } from './utils/time';
+import { createDiscordClient, registerBotEventHandlers, type BotServices } from './bot/client.js';
+import { loadConfig } from './config.js';
+import { createOpencodeSdkContext } from './opencode/sdk.js';
+import { createThreadTaskQueue } from './pipeline/enqueue.js';
+import { initializeDatabase, type ThreadSessionDatabase } from './storage/db.js';
+import { createThreadSessionRepo } from './storage/threadSessionRepo.js';
+import { toError } from './utils/errors.js';
+import { createLogger, setLoggerLevel } from './utils/logger.js';
+import { now } from './utils/time.js';
 
 const logger = createLogger({ module: 'app' });
 const THREAD_SESSION_DATABASE_PATH = join(process.cwd(), '.data', 'thread-sessions.sqlite');

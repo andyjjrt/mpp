@@ -1,8 +1,8 @@
 import { REST, Routes, SlashCommandBuilder } from 'discord.js';
 
-import { loadConfig } from './config';
-import { ConfigValidationError, toError } from './utils/errors';
-import { createLogger, setLoggerLevel } from './utils/logger';
+import { loadConfig } from './config.js';
+import { ConfigValidationError, toError } from './utils/errors.js';
+import { createLogger, setLoggerLevel } from './utils/logger.js';
 
 const logger = createLogger({ module: 'register-commands' });
 
@@ -18,13 +18,10 @@ const commands = [
     .setDescription('Set or view the AI model for this thread')
     .addStringOption((opt) =>
       opt
-        .setName('provider')
-        .setDescription('Model provider')
+        .setName('model')
+        .setDescription('Model in provider/model format')
         .setAutocomplete(true)
         .setRequired(false)
-    )
-    .addStringOption((opt) =>
-      opt.setName('model').setDescription('Model ID').setAutocomplete(true).setRequired(false)
     ),
   new SlashCommandBuilder()
     .setName('agent')
