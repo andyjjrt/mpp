@@ -152,10 +152,12 @@ export function createAsrClient(config: AsrClientConfig): AsrClient {
   const baseUrl = normalizeBaseUrl(config.baseUrl);
   const model = requireNonEmptyString('model', config.model);
   const endpointPath = normalizeEndpointPath(config.endpointPath ?? DEFAULT_ASR_ENDPOINT_PATH);
+  const defaultHeaders =
+    config.headers === undefined ? undefined : headersToObject(new Headers(config.headers));
   const openai = new OpenAI({
     apiKey: createOpenAiApiKey(config.apiKey),
     baseURL: baseUrl,
-    defaultHeaders: config.headers,
+    defaultHeaders,
     fetchOptions: createFetchOptions(config.dispatcher),
     maxRetries: 0,
   });

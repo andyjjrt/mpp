@@ -63,7 +63,7 @@ function writePcm16Samples(samples: Int16Array): Buffer {
   const buffer = Buffer.alloc(samples.length * PCM16_BYTES_PER_SAMPLE);
 
   for (let index = 0; index < samples.length; index += 1) {
-    buffer.writeInt16LE(samples[index], index * PCM16_BYTES_PER_SAMPLE);
+    buffer.writeInt16LE(samples[index] ?? 0, index * PCM16_BYTES_PER_SAMPLE);
   }
 
   return buffer;
@@ -93,7 +93,7 @@ function mixToMono(samples: Int16Array, channels: number): Int16Array {
     let mixedSample = 0;
 
     for (let channelIndex = 0; channelIndex < channels; channelIndex += 1) {
-      mixedSample += samples[frameIndex * channels + channelIndex];
+      mixedSample += samples[frameIndex * channels + channelIndex] ?? 0;
     }
 
     monoSamples[frameIndex] = clampPcm16Sample(mixedSample / channels);
