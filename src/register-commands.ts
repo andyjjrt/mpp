@@ -18,13 +18,10 @@ const commands = [
     .setDescription('Set or view the AI model for this thread')
     .addStringOption((opt) =>
       opt
-        .setName('provider')
-        .setDescription('Model provider')
+        .setName('model')
+        .setDescription('Model in provider/model format')
         .setAutocomplete(true)
         .setRequired(false)
-    )
-    .addStringOption((opt) =>
-      opt.setName('model').setDescription('Model ID').setAutocomplete(true).setRequired(false)
     ),
   new SlashCommandBuilder()
     .setName('agent')
