@@ -128,14 +128,15 @@ src/
 
 ### Optional
 
-| Variable            | Default                   | Description           |
-| ------------------- | ------------------------- | --------------------- |
-| `OPENCODE_BASE_URL` | `https://api.opencode.ai` | OpenCode API base URL |
-| `ASR_API_KEY`       | -                         | ASR provider API key  |
-| `ASR_BASE_URL`      | -                         | ASR provider base URL |
-| `ASR_MODEL`         | -                         | ASR model name        |
-| `LOG_LEVEL`         | `info`                    | Logging level         |
-| `NODE_ENV`          | `development`             | Environment mode      |
+| Variable             | Default                   | Description                                                                                                   |
+| -------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `OPENCODE_BASE_URL`  | `https://api.opencode.ai` | OpenCode API base URL                                                                                         |
+| `OPENCODE_DIRECTORY` | -                         | Override the workspace directory sent to OpenCode; if unset, the API server chooses its own default directory |
+| `ASR_API_KEY`        | -                         | ASR provider API key                                                                                          |
+| `ASR_BASE_URL`       | -                         | ASR provider base URL                                                                                         |
+| `ASR_MODEL`          | -                         | ASR model name                                                                                                |
+| `LOG_LEVEL`          | `info`                    | Logging level                                                                                                 |
+| `NODE_ENV`           | `development`             | Environment mode                                                                                              |
 
 ## Architecture Highlights
 
