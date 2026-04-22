@@ -168,6 +168,7 @@ function getSessionErrorMessage(error: unknown): string {
 }
 
 async function flushBufferedAssistantParts(
+  dependencies: HandleThreadMessageDependencies,
   thread: AnyThreadChannel,
   messageId: string,
   bufferedParts: Map<string, AssistantOutputPart[]>,
@@ -183,6 +184,7 @@ async function flushBufferedAssistantParts(
 
   for (const part of queuedParts) {
     await handleStreamingAssistantPart({
+      opencodeContext: dependencies.opencode,
       thread,
       part,
       state,
@@ -273,7 +275,7 @@ export async function handleThreadMessage(
 
         assistantMessageIds.add(info.id);
         nonAssistantMessageIds.delete(info.id);
-        await flushBufferedAssistantParts(options.thread, info.id, bufferedParts, dispatchState);
+        await flushBufferedAssistantParts(dependencies, options.thread, info.id, bufferedParts, dispatchState);
         continue;
       }
 
@@ -282,6 +284,7 @@ export async function handleThreadMessage(
 
         if (assistantMessageIds.has(part.messageId)) {
           await handleStreamingAssistantPart({
+            opencodeContext: dependencies.opencode,
             thread: options.thread,
             part,
             state: dispatchState,

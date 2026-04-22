@@ -1,12 +1,13 @@
 import type { AnyThreadChannel } from 'discord.js';
 
+import type { OpencodeSdkContext } from '../opencode/sdk.js';
 import type { SentDiscordPart } from '../discord/replies.js';
 import {
   sendAssistantReplies,
   sendRepliesToThread,
   upsertAssistantReplyPart,
 } from '../discord/replies.js';
-import type { AssistantOutputPart } from '../opencode/parts.js';
+import { parseAssistantQuestionToolCall, type AssistantOutputPart } from '../opencode/parts.js';
 import { RuntimeError, toError } from '../utils/errors.js';
 
 const EMPTY_ASSISTANT_OUTPUT_FALLBACK = '**Assistant**\n_(assistant returned no output parts)_';
@@ -14,6 +15,7 @@ const ASSISTANT_OUTPUT_DISPATCH_ERROR_FALLBACK =
   '**Error**\n_(assistant output could not be delivered to Discord)_';
 
 export interface HandleAssistantPartsOptions {
+  opencodeContext: OpencodeSdkContext;
   thread: AnyThreadChannel;
   parts: readonly AssistantOutputPart[];
 }
@@ -77,16 +79,26 @@ export function createStreamingAssistantDispatchState(options: {
 }
 
 export async function handleStreamingAssistantPart(options: {
+  opencodeContext: OpencodeSdkContext;
   thread: AnyThreadChannel;
   part: AssistantOutputPart;
   state: StreamingAssistantDispatchState;
 }): Promise<void> {
-  const { thread, part, state } = options;
+  const { opencodeContext, thread, part, state } = options;
 
   // Handle tool_result: update the tool call message to show completion
   if (part.type === 'tool_result') {
     const toolCallPartId = state.toolCallPartIdByCallId.get(part.callId);
     if (toolCallPartId) {
+      const toolCallPart = state.finalPartsByPartId.get(toolCallPartId);
+
+      if (
+        toolCallPart?.type === 'tool_call' &&
+        parseAssistantQuestionToolCall(toolCallPart) !== null
+      ) {
+        return;
+      }
+
       const previousSent = state.sentByPartId.get(toolCallPartId);
       if (previousSent) {
         // Edit the message to show completion icon
@@ -159,7 +171,7 @@ export async function handleStreamingAssistantPart(options: {
   const previous = state.sentByPartId.get(part.id);
 
   try {
-    const sentPart = await upsertAssistantReplyPart(thread, part, previous);
+    const sentPart = await upsertAssistantReplyPart(opencodeContext, thread, part, previous);
 
     if (!state.partOrder.includes(part.id)) {
       state.partOrder.push(part.id);
@@ -185,7 +197,7 @@ export async function handleAssistantParts(
   }
 
   try {
-    return await sendAssistantReplies(options.thread, options.parts);
+    return await sendAssistantReplies(options.opencodeContext, options.thread, options.parts);
   } catch (error) {
     await sendDispatchFailureFallback(options.thread, error);
     throw new RuntimeError(`Failed to dispatch assistant output: ${toError(error).message}`);

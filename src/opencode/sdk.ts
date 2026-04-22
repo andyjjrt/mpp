@@ -4,6 +4,8 @@ import type { AppConfig } from '../types.js';
 
 export interface OpencodeSdkContext {
   client: OpencodeClient;
+  baseUrl: string;
+  authorizationHeader?: string;
 }
 
 function trimTrailingSlashes(value: string): string {
@@ -30,13 +32,17 @@ export async function createOpencodeSdkContext(
   config: AppConfig,
   directory: string | undefined = config.opencode.directory
 ): Promise<OpencodeSdkContext> {
-  const authorization = createAuthorizationHeader(config.opencode.apiKey);
+  const authorizationHeader = createAuthorizationHeader(config.opencode.apiKey);
+  const baseUrl = resolveBaseUrl(config.opencode.baseUrl);
 
   return {
+    baseUrl,
+    authorizationHeader,
     client: createOpencodeClient({
-      baseUrl: resolveBaseUrl(config.opencode.baseUrl),
+      baseUrl,
       directory,
-      headers: authorization === undefined ? undefined : { Authorization: authorization },
+      headers:
+        authorizationHeader === undefined ? undefined : { Authorization: authorizationHeader },
     }),
   };
 }
