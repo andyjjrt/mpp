@@ -1,8 +1,10 @@
+import type { AssistantQuestionInfo } from './parts.js';
 import type { OpencodeSdkContext } from './sdk.js';
 import { RuntimeError, toError } from '../utils/errors.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger({ module: 'opencode:question-replies' });
+const QUESTION_LOOKUP_RETRY_DELAYS_MS = [150, 300, 600, 1000] as const;
 
 export interface SubmitQuestionReplyOptions {
   questionId: string;
@@ -12,10 +14,19 @@ export interface SubmitQuestionReplyOptions {
 interface QuestionLookupItem {
   id?: unknown;
   sessionID?: unknown;
+  questions?: unknown;
   tool?: {
-    messageID?: unknown;
     callID?: unknown;
   };
+}
+
+export interface ResolvedQuestionToolMessage {
+  questionId: string;
+  questions: readonly AssistantQuestionInfo[];
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function requireNonEmptyString(name: string, value: string): string {
@@ -52,13 +63,73 @@ function parseQuestionLookupItems(value: unknown): QuestionLookupItem[] {
   return Array.isArray(value) ? value.filter(isRecord) : [];
 }
 
-export async function resolveQuestionId(
+function parseQuestionOption(value: unknown): AssistantQuestionInfo['options'][number] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const label = typeof value.label === 'string' ? value.label.trim() : '';
+  const description = typeof value.description === 'string' ? value.description.trim() : '';
+
+  if (label.length === 0 || description.length === 0) {
+    return null;
+  }
+
+  return { label, description };
+}
+
+function parseQuestionInfo(value: unknown): AssistantQuestionInfo | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const question = typeof value.question === 'string' ? value.question.trim() : '';
+  const header = typeof value.header === 'string' ? value.header.trim() : '';
+  const parsedOptions = Array.isArray(value.options)
+    ? value.options.map((option) => parseQuestionOption(option))
+    : [];
+
+  if (
+    question.length === 0 ||
+    header.length === 0 ||
+    parsedOptions.length === 0 ||
+    parsedOptions.some((option) => option === null)
+  ) {
+    return null;
+  }
+
+  return {
+    question,
+    header,
+    options: parsedOptions.filter(
+      (option): option is AssistantQuestionInfo['options'][number] => option !== null
+    ),
+    multiple: typeof value.multiple === 'boolean' ? value.multiple : false,
+    custom: typeof value.custom === 'boolean' ? value.custom : true,
+  };
+}
+
+function parseLookupQuestions(value: unknown): readonly AssistantQuestionInfo[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const parsedQuestions = value.map((question) => parseQuestionInfo(question));
+
+  if (parsedQuestions.some((question) => question === null)) {
+    return [];
+  }
+
+  return parsedQuestions.filter((question): question is AssistantQuestionInfo => question !== null);
+}
+
+async function resolveQuestionByToolMessageOnce(
   context: OpencodeSdkContext,
   sessionId: string,
-  toolMessageId: string
-): Promise<string> {
+  toolCallId: string
+): Promise<ResolvedQuestionToolMessage> {
   const url = `${context.baseUrl}/question`;
-  logger.debug({ sessionId, toolMessageId, url }, 'Fetching question list to resolve id');
+  logger.debug({ sessionId, toolCallId, url }, 'Fetching question list to resolve question');
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -88,17 +159,28 @@ export async function resolveQuestionId(
   logger.debug({ candidateCount: items.length }, 'Parsed question lookup items');
   const match = items.find((item) => {
     const candidateSessionId = typeof item.sessionID === 'string' ? item.sessionID.trim() : '';
-    const candidateMessageId =
-      isRecord(item.tool) && typeof item.tool.messageID === 'string'
-        ? item.tool.messageID.trim()
-        : '';
-    return candidateSessionId === sessionId && candidateMessageId === toolMessageId;
+    const candidateCallId =
+      isRecord(item.tool) && typeof item.tool.callID === 'string' ? item.tool.callID.trim() : '';
+
+    return candidateSessionId === sessionId && candidateCallId === toolCallId;
   });
 
   const questionId = typeof match?.id === 'string' ? match.id.trim() : '';
-  if (questionId.length === 0) {
+  const questions = parseLookupQuestions(match?.questions);
+
+  if (questionId.length === 0 || questions.length === 0) {
+    logger.debug(
+      {
+        sessionId,
+        toolCallId,
+        questionId,
+        matchedQuestionCount: questions.length,
+        candidateCount: items.length,
+      },
+      'Question lookup did not produce a renderable question match'
+    );
     throw new RuntimeError(
-      `Could not resolve question id for session ${sessionId} and tool message ${toolMessageId}`,
+      `Could not resolve question for session ${sessionId} and tool call ${toolCallId}`,
       404
     );
   }
@@ -106,14 +188,96 @@ export async function resolveQuestionId(
   logger.debug(
     {
       sessionId,
-      toolMessageId,
+      toolCallId,
       questionId,
+      matchedQuestionCount: questions.length,
       candidateCount: items.length,
     },
-    'Resolved question id from question list'
+    'Resolved question from question list'
   );
 
-  return questionId;
+  return {
+    questionId,
+    questions,
+  };
+}
+
+export async function resolveQuestionByToolMessage(
+  context: OpencodeSdkContext,
+  sessionId: string,
+  toolCallId: string
+): Promise<ResolvedQuestionToolMessage> {
+  let lastError: RuntimeError | null = null;
+
+  for (let attempt = 0; attempt <= QUESTION_LOOKUP_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await resolveQuestionByToolMessageOnce(context, sessionId, toolCallId);
+    } catch (error) {
+      if (!(error instanceof RuntimeError) || error.statusCode !== 404) {
+        throw error;
+      }
+
+      lastError = error;
+      const retryDelayMs = QUESTION_LOOKUP_RETRY_DELAYS_MS[attempt];
+
+      logger.debug(
+        {
+          sessionId,
+          toolCallId,
+          attempt: attempt + 1,
+          maxAttempts: QUESTION_LOOKUP_RETRY_DELAYS_MS.length + 1,
+          retryDelayMs: retryDelayMs ?? 0,
+        },
+        retryDelayMs === undefined
+          ? 'Question lookup exhausted retries without a visible question record'
+          : 'Question lookup missed the question record; retrying'
+      );
+
+      if (retryDelayMs === undefined) {
+        break;
+      }
+
+      await delay(retryDelayMs);
+    }
+  }
+
+  if (lastError !== null) {
+    throw lastError;
+  }
+
+  throw new RuntimeError(
+    `Could not resolve question for session ${sessionId} and tool call ${toolCallId}`,
+    404
+  );
+}
+
+export async function resolveQuestionId(
+  context: OpencodeSdkContext,
+  sessionId: string,
+  toolCallId: string
+): Promise<string> {
+  const resolvedQuestion = await resolveQuestionByToolMessage(context, sessionId, toolCallId);
+  return resolvedQuestion.questionId;
+}
+
+export interface SubmitDeferredQuestionReplyOptions {
+  sessionId: string;
+  toolCallId: string;
+  answers: string[][];
+}
+
+export async function submitDeferredQuestionReply(
+  context: OpencodeSdkContext,
+  options: SubmitDeferredQuestionReplyOptions
+): Promise<void> {
+  const sessionId = requireNonEmptyString('sessionId', options.sessionId);
+  const toolCallId = requireNonEmptyString('toolCallId', options.toolCallId);
+  const questionId = await resolveQuestionId(context, sessionId, toolCallId);
+
+  await submitQuestionReply(context, {
+    questionId,
+    answers: options.answers,
+  });
 }
 
 export async function submitQuestionReply(

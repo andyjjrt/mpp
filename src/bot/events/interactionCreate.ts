@@ -11,8 +11,7 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from 'discord.js';
-import type { APIMessageTopLevelComponent } from 'discord-api-types/v10';
-
+import type { APIComponentInContainer, APIMessageTopLevelComponent } from 'discord-api-types/v10';
 import {
   QUESTION_CUSTOM_ANSWER_FIELD_ID,
   createQuestionAnswerModal,
@@ -22,8 +21,9 @@ import {
   parseQuestionOtherCustomId,
   parseQuestionSelectCustomId,
 } from '../../discord/questionUi.js';
+
 import { assertBoundManagedSessionThread } from '../../discord/threadGuards.js';
-import { submitQuestionReply } from '../../opencode/questionReplies.js';
+import { submitDeferredQuestionReply } from '../../opencode/questionReplies.js';
 import type { AppConfig } from '../../types.js';
 import type { OpencodeSdkContext } from '../../opencode/sdk.js';
 import type { ThreadTaskQueue } from '../../pipeline/enqueue.js';
@@ -174,27 +174,44 @@ function toApiTopLevelComponents(
   return components.map((c) => c.toJSON());
 }
 
-function updateQuestionContainerAtIndex(
+function extractQuestionTextFromComponent(component: APIMessageTopLevelComponent): string {
+  // Try to extract question text from a Container component
+  if (component.type === ComponentType.Container && Array.isArray(component.components)) {
+    for (const child of component.components) {
+      if (child.type === ComponentType.TextDisplay && typeof child.content === 'string') {
+        // Look for the prompt text which contains "**Question X**\n**{header}**\n{question}"
+        const content = child.content;
+        const lines = content.split('\n');
+        // Find the line with the actual question (after header)
+        if (lines.length >= 2) {
+          // Return the question line (usually the 3rd line, after "**Question X**" and "**header**")
+          const questionLine = lines.find(
+            (line) =>
+              line &&
+              !line.startsWith('**') &&
+              !line.startsWith('Select') &&
+              !line.startsWith('Choose')
+          );
+          if (questionLine) return questionLine.trim();
+        }
+      }
+    }
+  }
+  return 'Question';
+}
+
+function replaceQuestionWithCompletedComponents(
   components: readonly { toJSON(): APIMessageTopLevelComponent }[],
   questionIndex: number,
-  replacement: APIMessageTopLevelComponent
+  completedComponents: readonly APIMessageTopLevelComponent[]
 ): APIMessageTopLevelComponent[] {
   const api = toApiTopLevelComponents(components);
   if (questionIndex < 0 || questionIndex >= api.length) {
     throw new RuntimeError('Question index out of bounds', 400);
   }
-  api[questionIndex] = replacement;
+  // Replace the question container with flat text components
+  api.splice(questionIndex, 1, ...completedComponents);
   return api;
-}
-
-function createCompletedQuestionComponentForAnswers(
-  answers: readonly string[]
-): APIMessageTopLevelComponent {
-  const [component] = createCompletedQuestionComponents(answers);
-  if (component === undefined) {
-    throw new RuntimeError('Missing completed question component', 500);
-  }
-  return component;
 }
 
 async function sendInteractionReply(
@@ -215,31 +232,50 @@ async function sendInteractionReply(
   await interaction.reply(reply);
 }
 
+// Question interactions bypass the queue - they execute immediately
+// This prevents them from being blocked by long-running message processing tasks
+
 async function handleQuestionSelectInteraction(
   services: InteractionCreateServices,
   interaction: StringSelectMenuInteraction
 ): Promise<boolean> {
   const parsed = parseQuestionSelectCustomId(interaction.customId);
   if (!parsed) return false;
-  const { thread, sessionId } = assertBoundManagedSessionThread(
-    services.threadSessionRepo,
-    interaction
+  const { sessionId } = assertBoundManagedSessionThread(services.threadSessionRepo, interaction);
+  if (sessionId !== parsed.sessionId) throw new RuntimeError('Session mismatch', 400);
+
+  logger.debug(
+    {
+      interactionId: interaction.id,
+      customId: interaction.customId,
+      sessionId,
+      toolCallId: parsed.toolCallId,
+      questionIndex: parsed.questionIndex,
+      values: interaction.values,
+    },
+    'Question select interaction started'
   );
+
   await interaction.deferUpdate();
-  await services.threadTaskQueue.enqueue(thread.id, async () => {
-    await submitQuestionReply(services.opencodeContext, {
-      questionId: parsed.questionId,
-      answers: [interaction.values],
-    });
-    await interaction.message.edit({
-      components: updateQuestionContainerAtIndex(
-        interaction.message.components,
-        parsed.questionIndex,
-        createCompletedQuestionComponentForAnswers(interaction.values)
-      ),
-      flags: MessageFlags.IsComponentsV2,
-      allowedMentions: { parse: [] },
-    });
+  await submitDeferredQuestionReply(services.opencodeContext, {
+    sessionId,
+    toolCallId: parsed.toolCallId,
+    answers: [interaction.values],
+  });
+  const api = toApiTopLevelComponents(interaction.message.components);
+  const questionComponent = api[parsed.questionIndex];
+  const questionText = questionComponent
+    ? extractQuestionTextFromComponent(questionComponent)
+    : 'Question';
+
+  await interaction.message.edit({
+    components: replaceQuestionWithCompletedComponents(
+      interaction.message.components,
+      parsed.questionIndex,
+      createCompletedQuestionComponents(questionText, interaction.values)
+    ),
+    flags: MessageFlags.IsComponentsV2,
+    allowedMentions: { parse: [] },
   });
   return true;
 }
@@ -250,40 +286,43 @@ async function handleQuestionOptionInteraction(
 ): Promise<boolean> {
   const parsed = parseQuestionOptionCustomId(interaction.customId);
   if (!parsed) return false;
-  const { thread, sessionId } = assertBoundManagedSessionThread(
-    services.threadSessionRepo,
-    interaction
-  );
+  const { sessionId } = assertBoundManagedSessionThread(services.threadSessionRepo, interaction);
   const answer = resolveButtonInteractionLabel(interaction);
   if (!answer) throw new RuntimeError('Could not resolve answer', 400);
+
   logger.debug(
     {
       interactionId: interaction.id,
       customId: interaction.customId,
       sessionId,
-      questionId: parsed.questionId,
+      toolCallId: parsed.toolCallId,
       questionIndex: parsed.questionIndex,
       optionIndex: parsed.optionIndex,
       answer,
-      messageId: interaction.message.id,
     },
-    'Preparing question button reply submission'
+    'Question button interaction started'
   );
+
   await interaction.deferUpdate();
-  await services.threadTaskQueue.enqueue(thread.id, async () => {
-    await submitQuestionReply(services.opencodeContext, {
-      questionId: parsed.questionId,
-      answers: [[answer]],
-    });
-    await interaction.message.edit({
-      components: updateQuestionContainerAtIndex(
-        interaction.message.components,
-        parsed.questionIndex,
-        createCompletedQuestionComponentForAnswers([answer])
-      ),
-      flags: MessageFlags.IsComponentsV2,
-      allowedMentions: { parse: [] },
-    });
+  await submitDeferredQuestionReply(services.opencodeContext, {
+    sessionId,
+    toolCallId: parsed.toolCallId,
+    answers: [[answer]],
+  });
+  const api = toApiTopLevelComponents(interaction.message.components);
+  const questionComponent = api[parsed.questionIndex];
+  const questionText = questionComponent
+    ? extractQuestionTextFromComponent(questionComponent)
+    : 'Question';
+
+  await interaction.message.edit({
+    components: replaceQuestionWithCompletedComponents(
+      interaction.message.components,
+      parsed.questionIndex,
+      createCompletedQuestionComponents(questionText, [answer])
+    ),
+    flags: MessageFlags.IsComponentsV2,
+    allowedMentions: { parse: [] },
   });
   return true;
 }
@@ -296,7 +335,12 @@ async function handleQuestionOtherAnswerInteraction(
   if (!parsed) return false;
   assertBoundManagedSessionThread(services.threadSessionRepo, interaction);
   await interaction.showModal(
-    createQuestionAnswerModal(parsed.questionId, parsed.questionIndex, interaction.message.id)
+    createQuestionAnswerModal(
+      parsed.sessionId,
+      parsed.toolCallId,
+      parsed.questionIndex,
+      interaction.message.id
+    )
   );
   return true;
 }
@@ -313,35 +357,41 @@ async function handleQuestionModalSubmitInteraction(
   );
   const answer = interaction.fields.getTextInputValue(QUESTION_CUSTOM_ANSWER_FIELD_ID).trim();
   if (!answer) throw new RuntimeError('Empty answer', 400);
+
   logger.debug(
     {
       interactionId: interaction.id,
       customId: interaction.customId,
       sessionId,
-      questionId: parsed.questionId,
+      toolCallId: parsed.toolCallId,
       questionIndex: parsed.questionIndex,
       answer,
-      sourceMessageId: parsed.messageId,
     },
-    'Preparing question modal reply submission'
+    'Question modal submit interaction started'
   );
+
   await interaction.deferUpdate();
-  await services.threadTaskQueue.enqueue(thread.id, async () => {
-    const msg = await thread.messages.fetch(parsed.messageId).catch(() => null);
-    if (!msg) throw new RuntimeError('Message not found', 404);
-    await submitQuestionReply(services.opencodeContext, {
-      questionId: parsed.questionId,
-      answers: [[answer]],
-    });
-    await msg.edit({
-      components: updateQuestionContainerAtIndex(
-        msg.components,
-        parsed.questionIndex,
-        createCompletedQuestionComponentForAnswers([answer])
-      ),
-      flags: MessageFlags.IsComponentsV2,
-      allowedMentions: { parse: [] },
-    });
+  await submitDeferredQuestionReply(services.opencodeContext, {
+    sessionId,
+    toolCallId: parsed.toolCallId,
+    answers: [[answer]],
+  });
+  const msg = await thread.messages.fetch(parsed.messageId).catch(() => null);
+  if (!msg) throw new RuntimeError('Message not found', 404);
+  const api = toApiTopLevelComponents(msg.components);
+  const questionComponent = api[parsed.questionIndex];
+  const questionText = questionComponent
+    ? extractQuestionTextFromComponent(questionComponent)
+    : 'Question';
+
+  await msg.edit({
+    components: replaceQuestionWithCompletedComponents(
+      msg.components,
+      parsed.questionIndex,
+      createCompletedQuestionComponents(questionText, [answer])
+    ),
+    flags: MessageFlags.IsComponentsV2,
+    allowedMentions: { parse: [] },
   });
   return true;
 }

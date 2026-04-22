@@ -1,10 +1,10 @@
 import type {
+  APIComponentInContainer,
   APIMessageTopLevelComponent,
   APISectionComponent,
   APITextDisplayComponent,
 } from 'discord-api-types/v10';
 import {
-  ActionRowBuilder,
   ButtonStyle,
   ComponentType,
   ModalBuilder,
@@ -12,7 +12,6 @@ import {
   SeparatorSpacingSize,
   StringSelectMenuBuilder,
   TextDisplayBuilder,
-  TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
 
@@ -21,9 +20,7 @@ import {
   type AssistantQuestionInfo,
   type AssistantToolCallPart,
 } from '../opencode/parts.js';
-import { resolveQuestionId } from '../opencode/questionReplies.js';
 import type { OpencodeSdkContext } from '../opencode/sdk.js';
-import { createLogger } from '../utils/logger.js';
 import type { RenderedDiscordPart } from './partRenderer.js';
 
 const QUESTION_SELECT_CUSTOM_ID_PREFIX = 'mpp-question-select';
@@ -32,26 +29,29 @@ const QUESTION_OPTION_CUSTOM_ID_PREFIX = 'mpp-question-option';
 const QUESTION_MODAL_CUSTOM_ID_PREFIX = 'mpp-question-modal';
 export const QUESTION_CUSTOM_ANSWER_FIELD_ID = 'answer';
 const MAX_SELECT_OPTIONS = 25;
-const logger = createLogger({ module: 'discord:question-ui' });
 
 export interface QuestionSelectCustomId {
-  questionId: string;
+  sessionId: string;
+  toolCallId: string;
   questionIndex: number;
 }
 
 export interface QuestionOtherCustomId {
-  questionId: string;
+  sessionId: string;
+  toolCallId: string;
   questionIndex: number;
 }
 
 export interface QuestionOptionCustomId {
-  questionId: string;
+  sessionId: string;
+  toolCallId: string;
   questionIndex: number;
   optionIndex: number;
 }
 
 export interface QuestionModalCustomId {
-  questionId: string;
+  sessionId: string;
+  toolCallId: string;
   questionIndex: number;
   messageId: string;
 }
@@ -106,7 +106,8 @@ function createQuestionPromptText(
 }
 
 function createQuestionOptionSection(
-  questionId: string,
+  sessionId: string,
+  toolCallId: string,
   questionIndex: number,
   optionIndex: number,
   option: AssistantQuestionInfo['options'][number]
@@ -118,12 +119,16 @@ function createQuestionOptionSection(
       type: ComponentType.Button,
       style: ButtonStyle.Secondary,
       label: option.label,
-      custom_id: createQuestionOptionCustomId(questionId, questionIndex, optionIndex),
+      custom_id: createQuestionOptionCustomId(sessionId, toolCallId, questionIndex, optionIndex),
     },
   };
 }
 
-function createOtherAnswerSection(questionId: string, questionIndex: number): APISectionComponent {
+function createOtherAnswerSection(
+  sessionId: string,
+  toolCallId: string,
+  questionIndex: number
+): APISectionComponent {
   return {
     type: ComponentType.Section,
     components: [
@@ -135,13 +140,14 @@ function createOtherAnswerSection(questionId: string, questionIndex: number): AP
       type: ComponentType.Button,
       style: ButtonStyle.Primary,
       label: 'Type answer',
-      custom_id: createQuestionOtherCustomId(questionId, questionIndex),
+      custom_id: createQuestionOtherCustomId(sessionId, toolCallId, questionIndex),
     },
   };
 }
 
 function buildSingleChoiceComponents(
-  questionId: string,
+  sessionId: string,
+  toolCallId: string,
   questionIndex: number,
   question: AssistantQuestionInfo
 ): readonly APIMessageTopLevelComponent[] {
@@ -151,21 +157,22 @@ function buildSingleChoiceComponents(
       components: [
         createTextDisplay(createQuestionPromptText(question, questionIndex + 1)),
         ...question.options.map((option, optionIndex) =>
-          createQuestionOptionSection(questionId, questionIndex, optionIndex, option)
+          createQuestionOptionSection(sessionId, toolCallId, questionIndex, optionIndex, option)
         ),
-        createOtherAnswerSection(questionId, questionIndex),
+        createOtherAnswerSection(sessionId, toolCallId, questionIndex),
       ],
     },
   ];
 }
 
 function buildMultipleChoiceComponents(
-  questionId: string,
+  sessionId: string,
+  toolCallId: string,
   questionIndex: number,
   question: AssistantQuestionInfo
 ): readonly APIMessageTopLevelComponent[] {
   const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(createQuestionSelectCustomId(questionId, questionIndex))
+    .setCustomId(createQuestionSelectCustomId(sessionId, toolCallId, questionIndex))
     .setPlaceholder('Choose one or more answers')
     .setMinValues(1)
     .setMaxValues(question.options.length)
@@ -191,36 +198,41 @@ function buildMultipleChoiceComponents(
           type: ComponentType.ActionRow,
           components: [selectMenu.toJSON()],
         },
-        createOtherAnswerSection(questionId, questionIndex),
+        createOtherAnswerSection(sessionId, toolCallId, questionIndex),
       ],
     },
   ];
 }
 
 function buildQuestionComponents(
-  questionId: string,
+  sessionId: string,
+  toolCallId: string,
   questionIndex: number,
   question: AssistantQuestionInfo
 ): readonly APIMessageTopLevelComponent[] {
   return question.multiple
-    ? buildMultipleChoiceComponents(questionId, questionIndex, question)
-    : buildSingleChoiceComponents(questionId, questionIndex, question);
+    ? buildMultipleChoiceComponents(sessionId, toolCallId, questionIndex, question)
+    : buildSingleChoiceComponents(sessionId, toolCallId, questionIndex, question);
 }
 
-export function createQuestionSelectCustomId(questionId: string, questionIndex: number): string {
-  return `${QUESTION_SELECT_CUSTOM_ID_PREFIX}:${encodeCustomIdPart(questionId)}:${questionIndex}`;
+export function createQuestionSelectCustomId(
+  sessionId: string,
+  toolCallId: string,
+  questionIndex: number
+): string {
+  return `${QUESTION_SELECT_CUSTOM_ID_PREFIX}:${encodeCustomIdPart(sessionId)}:${encodeCustomIdPart(toolCallId)}:${questionIndex}`;
 }
 
 export function parseQuestionSelectCustomId(customId: string): QuestionSelectCustomId | null {
-  const parsedSegments = parseCustomId(customId, QUESTION_SELECT_CUSTOM_ID_PREFIX, 2);
+  const parsedSegments = parseCustomId(customId, QUESTION_SELECT_CUSTOM_ID_PREFIX, 3);
 
   if (parsedSegments === null) {
     return null;
   }
 
-  const [questionId, questionIndexStr] = parsedSegments;
+  const [sessionId, toolCallId, questionIndexStr] = parsedSegments;
 
-  if (questionId === undefined || questionIndexStr === undefined) {
+  if (sessionId === undefined || toolCallId === undefined || questionIndexStr === undefined) {
     return null;
   }
 
@@ -230,23 +242,27 @@ export function parseQuestionSelectCustomId(customId: string): QuestionSelectCus
     return null;
   }
 
-  return { questionId, questionIndex };
+  return { sessionId, toolCallId, questionIndex };
 }
 
-export function createQuestionOtherCustomId(questionId: string, questionIndex: number): string {
-  return `${QUESTION_OTHER_CUSTOM_ID_PREFIX}:${encodeCustomIdPart(questionId)}:${questionIndex}`;
+export function createQuestionOtherCustomId(
+  sessionId: string,
+  toolCallId: string,
+  questionIndex: number
+): string {
+  return `${QUESTION_OTHER_CUSTOM_ID_PREFIX}:${encodeCustomIdPart(sessionId)}:${encodeCustomIdPart(toolCallId)}:${questionIndex}`;
 }
 
 export function parseQuestionOtherCustomId(customId: string): QuestionOtherCustomId | null {
-  const parsedSegments = parseCustomId(customId, QUESTION_OTHER_CUSTOM_ID_PREFIX, 2);
+  const parsedSegments = parseCustomId(customId, QUESTION_OTHER_CUSTOM_ID_PREFIX, 3);
 
   if (parsedSegments === null) {
     return null;
   }
 
-  const [questionId, questionIndexStr] = parsedSegments;
+  const [sessionId, toolCallId, questionIndexStr] = parsedSegments;
 
-  if (questionId === undefined || questionIndexStr === undefined) {
+  if (sessionId === undefined || toolCallId === undefined || questionIndexStr === undefined) {
     return null;
   }
 
@@ -256,27 +272,33 @@ export function parseQuestionOtherCustomId(customId: string): QuestionOtherCusto
     return null;
   }
 
-  return { questionId, questionIndex };
+  return { sessionId, toolCallId, questionIndex };
 }
 
 export function createQuestionOptionCustomId(
-  questionId: string,
+  sessionId: string,
+  toolCallId: string,
   questionIndex: number,
   optionIndex: number
 ): string {
-  return `${QUESTION_OPTION_CUSTOM_ID_PREFIX}:${encodeCustomIdPart(questionId)}:${questionIndex}:${optionIndex}`;
+  return `${QUESTION_OPTION_CUSTOM_ID_PREFIX}:${encodeCustomIdPart(sessionId)}:${encodeCustomIdPart(toolCallId)}:${questionIndex}:${optionIndex}`;
 }
 
 export function parseQuestionOptionCustomId(customId: string): QuestionOptionCustomId | null {
-  const parsedSegments = parseCustomId(customId, QUESTION_OPTION_CUSTOM_ID_PREFIX, 3);
+  const parsedSegments = parseCustomId(customId, QUESTION_OPTION_CUSTOM_ID_PREFIX, 4);
 
   if (parsedSegments === null) {
     return null;
   }
 
-  const [questionId, questionIndexStr, optionIndexStr] = parsedSegments;
+  const [sessionId, toolCallId, questionIndexStr, optionIndexStr] = parsedSegments;
 
-  if (questionId === undefined || questionIndexStr === undefined || optionIndexStr === undefined) {
+  if (
+    sessionId === undefined ||
+    toolCallId === undefined ||
+    questionIndexStr === undefined ||
+    optionIndexStr === undefined
+  ) {
     return null;
   }
 
@@ -292,27 +314,33 @@ export function parseQuestionOptionCustomId(customId: string): QuestionOptionCus
     return null;
   }
 
-  return { questionId, questionIndex, optionIndex };
+  return { sessionId, toolCallId, questionIndex, optionIndex };
 }
 
 export function createQuestionModalCustomId(
-  questionId: string,
+  sessionId: string,
+  toolCallId: string,
   questionIndex: number,
   messageId: string
 ): string {
-  return `${QUESTION_MODAL_CUSTOM_ID_PREFIX}:${encodeCustomIdPart(questionId)}:${questionIndex}:${encodeCustomIdPart(messageId)}`;
+  return `${QUESTION_MODAL_CUSTOM_ID_PREFIX}:${encodeCustomIdPart(sessionId)}:${encodeCustomIdPart(toolCallId)}:${questionIndex}:${encodeCustomIdPart(messageId)}`;
 }
 
 export function parseQuestionModalCustomId(customId: string): QuestionModalCustomId | null {
-  const parsedSegments = parseCustomId(customId, QUESTION_MODAL_CUSTOM_ID_PREFIX, 3);
+  const parsedSegments = parseCustomId(customId, QUESTION_MODAL_CUSTOM_ID_PREFIX, 4);
 
   if (parsedSegments === null) {
     return null;
   }
 
-  const [questionId, questionIndexStr, messageId] = parsedSegments;
+  const [sessionId, toolCallId, questionIndexStr, messageId] = parsedSegments;
 
-  if (questionId === undefined || questionIndexStr === undefined || messageId === undefined) {
+  if (
+    sessionId === undefined ||
+    toolCallId === undefined ||
+    questionIndexStr === undefined ||
+    messageId === undefined
+  ) {
     return null;
   }
 
@@ -323,29 +351,39 @@ export function parseQuestionModalCustomId(customId: string): QuestionModalCusto
   }
 
   return {
-    questionId,
+    sessionId,
+    toolCallId,
     questionIndex,
     messageId,
   };
 }
 
 export function createQuestionAnswerModal(
-  questionId: string,
+  sessionId: string,
+  toolCallId: string,
   questionIndex: number,
   messageId: string
 ): ModalBuilder {
-  const answerInput = new TextInputBuilder()
-    .setCustomId(QUESTION_CUSTOM_ANSWER_FIELD_ID)
-    .setLabel('Other answer')
-    .setPlaceholder('Type your answer')
-    .setRequired(true)
-    .setStyle(TextInputStyle.Paragraph)
-    .setMaxLength(4000);
-
-  return new ModalBuilder()
-    .setCustomId(createQuestionModalCustomId(questionId, questionIndex, messageId))
-    .setTitle('Submit other answer')
-    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(answerInput));
+  return new ModalBuilder({
+    custom_id: createQuestionModalCustomId(sessionId, toolCallId, questionIndex, messageId),
+    title: 'Submit other answer',
+    components: [
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.TextInput,
+            custom_id: QUESTION_CUSTOM_ANSWER_FIELD_ID,
+            label: 'Other answer',
+            placeholder: 'Type your answer',
+            required: true,
+            style: TextInputStyle.Paragraph,
+            max_length: 4000,
+          },
+        ],
+      },
+    ],
+  });
 }
 
 export function createSubmittedQuestionContent(
@@ -372,26 +410,21 @@ export function createSubmittedQuestionComponents(
 export function createCompletedQuestionContent(title?: string): string {
   return `> :done: Task ${title ?? ''}`.trim();
 }
-
+// Returns a single text component with question and answer
 export function createCompletedQuestionComponents(
+  question: string,
   answers: readonly string[]
 ): readonly APIMessageTopLevelComponent[] {
-  const completedText = new TextDisplayBuilder().setContent(createCompletedQuestionContent());
-  const separator = new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small);
-  const answerText = new TextDisplayBuilder().setContent(
-    `Answer: ${answers.map((answer) => `\`${escapeInlineCode(answer)}\``).join(', ')}`
+  const answerText = answers.map((answer) => `\`${escapeInlineCode(answer)}\``).join(', ');
+  const text = new TextDisplayBuilder().setContent(
+    `> :white_check_mark: **Question** ${question}: ${answerText}`
   );
 
-  return [
-    {
-      type: ComponentType.Container,
-      components: [completedText.toJSON(), separator.toJSON(), answerText.toJSON()],
-    },
-  ];
+  return [text.toJSON()];
 }
 
 export async function renderQuestionToolCallPart(
-  context: OpencodeSdkContext,
+  _context: OpencodeSdkContext,
   part: AssistantToolCallPart
 ): Promise<RenderedDiscordPart | null> {
   const questionToolCall = parseAssistantQuestionToolCall(part);
@@ -400,35 +433,10 @@ export async function renderQuestionToolCallPart(
     return null;
   }
 
-  const interactionToolMessageId = questionToolCall.toolMessageId;
-
-  logger.debug(
-    {
-      partId: part.id,
-      sessionId: questionToolCall.sessionId,
-      toolMessageId: interactionToolMessageId,
-    },
-    'Resolving question id during Discord question render'
-  );
-
-  const questionId = await resolveQuestionId(
-    context,
-    questionToolCall.sessionId,
-    interactionToolMessageId
-  );
-
-  logger.debug(
-    {
-      partId: part.id,
-      sessionId: questionToolCall.sessionId,
-      toolMessageId: interactionToolMessageId,
-      questionId,
-    },
-    'Resolved question id during Discord question render'
-  );
+  const { sessionId, callId: toolCallId, questions } = questionToolCall;
 
   // Validate all questions have valid options
-  for (const question of questionToolCall.questions) {
+  for (const question of questions) {
     if (question.options.length === 0 || question.options.length > MAX_SELECT_OPTIONS) {
       return null;
     }
@@ -437,25 +445,22 @@ export async function renderQuestionToolCallPart(
   // Build components for all questions
   const allComponents: APIMessageTopLevelComponent[] = [];
 
-  for (let questionIndex = 0; questionIndex < questionToolCall.questions.length; questionIndex++) {
-    const question = questionToolCall.questions[questionIndex];
+  for (let questionIndex = 0; questionIndex < questions.length; questionIndex++) {
+    const question = questions[questionIndex];
     if (question === undefined) {
       continue;
     }
-    const components = buildQuestionComponents(questionId, questionIndex, question);
+    const components = buildQuestionComponents(sessionId, toolCallId, questionIndex, question);
     allComponents.push(...components);
   }
 
-  questionToolCall.questionId = questionId;
-
-  const renderedPart: RenderedDiscordPart & { questionId: string } = {
+  const renderedPart: RenderedDiscordPart = {
     id: part.id,
     kind: 'question',
     label: 'Question',
     content: '',
     components: allComponents,
     usesComponentsV2: true,
-    questionId,
   };
 
   return renderedPart;
