@@ -275,7 +275,13 @@ export async function handleThreadMessage(
 
         assistantMessageIds.add(info.id);
         nonAssistantMessageIds.delete(info.id);
-        await flushBufferedAssistantParts(dependencies, options.thread, info.id, bufferedParts, dispatchState);
+        await flushBufferedAssistantParts(
+          dependencies,
+          options.thread,
+          info.id,
+          bufferedParts,
+          dispatchState
+        );
         continue;
       }
 
