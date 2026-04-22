@@ -28,7 +28,7 @@ function createAuthorizationHeader(apiKey?: string): string | undefined {
 
 export async function createOpencodeSdkContext(
   config: AppConfig,
-  directory: string = process.cwd()
+  directory: string | undefined = config.opencode.directory
 ): Promise<OpencodeSdkContext> {
   const authorization = createAuthorizationHeader(config.opencode.apiKey);
 

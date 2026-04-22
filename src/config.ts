@@ -104,6 +104,7 @@ const environmentSchema = z.object({
     .trim()
     .url('OPENCODE_BASE_URL must be a valid URL')
     .default('https://api.opencode.ai'),
+  OPENCODE_DIRECTORY: z.string().trim().min(1, 'OPENCODE_DIRECTORY cannot be empty').optional(),
   OPENCODE_SERVER_USERNAME: z.string().trim().default('opencode'),
   OPENCODE_SERVER_PASSWORD: z.string().trim().optional(),
   ASR_API_KEY: z.string().trim().min(1, 'ASR_API_KEY cannot be empty').optional(),
@@ -152,6 +153,7 @@ export function loadConfig(): AppConfig {
     opencode: {
       apiKey: env.OPENCODE_API_KEY,
       baseUrl: env.OPENCODE_BASE_URL,
+      directory: env.OPENCODE_DIRECTORY,
       username: env.OPENCODE_SERVER_USERNAME,
       password: env.OPENCODE_SERVER_PASSWORD,
     },
