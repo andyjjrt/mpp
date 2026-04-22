@@ -1,8 +1,8 @@
 import { REST, Routes, SlashCommandBuilder } from 'discord.js';
 
-import { loadConfig } from './config';
-import { ConfigValidationError, toError } from './utils/errors';
-import { createLogger, setLoggerLevel } from './utils/logger';
+import { loadConfig } from './config.js';
+import { ConfigValidationError, toError } from './utils/errors.js';
+import { createLogger, setLoggerLevel } from './utils/logger.js';
 
 const logger = createLogger({ module: 'register-commands' });
 
