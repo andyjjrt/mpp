@@ -1,6 +1,6 @@
 import type { AnyThreadChannel, Message, PublicThreadChannel } from 'discord.js';
 
-import { RuntimeError, toError } from '../utils/errors';
+import { RuntimeError, toError } from '../utils/errors.js';
 
 const DISCORD_THREAD_TITLE_MAX_LENGTH = 100;
 const DISCORD_MESSAGE_CONTENT_MAX_LENGTH = 2_000;

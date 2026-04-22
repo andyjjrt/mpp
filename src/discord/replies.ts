@@ -1,10 +1,10 @@
 import { EmbedBuilder, type AnyThreadChannel, type Message } from 'discord.js';
 
-import type { AssistantOutputPart } from '../opencode/parts';
+import type { AssistantOutputPart } from '../opencode/parts.js';
 import { RuntimeError, toError } from '../utils/errors.js';
-import { splitDiscordMessage } from './messageSplitter';
-import { renderAssistantPart } from './partRenderer';
-import type { RenderedDiscordPart } from './partRenderer';
+import { splitDiscordMessage } from './messageSplitter.js';
+import { renderAssistantPart } from './partRenderer.js';
+import type { RenderedDiscordPart } from './partRenderer.js';
 
 const EMPTY_ASSISTANT_OUTPUT_FALLBACK = '**Assistant**\n_(assistant returned no output parts)_';
 const DISCORD_TYPING_REFRESH_INTERVAL_MS = 9000;
@@ -208,6 +208,10 @@ export async function upsertAssistantReplyPart(
     const previousMessage = previous.messages[index];
     const nextChunk = nextChunks[index];
 
+    if (previousMessage === undefined || nextChunk === undefined) {
+      throw new RuntimeError('Failed to reconcile assistant reply chunks');
+    }
+
     if (previousMessage.content === nextChunk) {
       updatedMessages.push(previousMessage);
       continue;
@@ -217,11 +221,23 @@ export async function upsertAssistantReplyPart(
   }
 
   for (let index = sharedChunkCount; index < nextChunks.length; index += 1) {
-    updatedMessages.push(await sendContentChunk(thread, nextChunks[index]));
+    const nextChunk = nextChunks[index];
+
+    if (nextChunk === undefined) {
+      throw new RuntimeError('Failed to append assistant reply chunk');
+    }
+
+    updatedMessages.push(await sendContentChunk(thread, nextChunk));
   }
 
   for (let index = sharedChunkCount; index < previous.messages.length; index += 1) {
-    await deleteContentChunk(thread, previous.messages[index]);
+    const previousMessage = previous.messages[index];
+
+    if (previousMessage === undefined) {
+      throw new RuntimeError('Failed to prune assistant reply chunk');
+    }
+
+    await deleteContentChunk(thread, previousMessage);
   }
 
   return {
