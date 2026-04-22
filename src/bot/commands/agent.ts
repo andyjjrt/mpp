@@ -98,12 +98,24 @@ function normalizeAgents(input: unknown): Agent[] {
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
+function unwrapResponseData(input: unknown): unknown {
+  if (!isRecord(input) || !('data' in input)) {
+    return input;
+  }
+
+  return input.data;
+}
+
 function formatAgentModel(agent: Agent): string {
   if (agent.model === undefined) {
     return 'Default';
   }
 
   return `\`${agent.model.providerID}/${agent.model.modelID}\``;
+}
+
+function filterSelectableAgents(agents: readonly Agent[]): Agent[] {
+  return agents.filter((agent) => agent.mode === 'primary');
 }
 
 function sortAgents(agents: readonly Agent[], currentAgent: string | null): Agent[] {
@@ -193,7 +205,7 @@ function createAgentErrorEmbed(error: string): EmbedBuilder {
 async function loadAgents(services: AgentCommandServices): Promise<Agent[]> {
   const agents = await services.opencodeContext.client.app.agents();
 
-  return normalizeAgents(agents);
+  return normalizeAgents(unwrapResponseData(agents));
 }
 
 function createAutocompleteChoices(
@@ -216,7 +228,7 @@ export async function handleAgentAutocomplete(
   interaction: AutocompleteInteraction
 ): Promise<void> {
   try {
-    const agents = await loadAgents(services);
+    const agents = filterSelectableAgents(await loadAgents(services));
 
     await interaction.respond(
       createAutocompleteChoices(
@@ -254,7 +266,7 @@ async function setRequestedAgent(
 ): Promise<InteractionCommandResult> {
   const { thread } = assertBoundManagedSessionThread(services.threadSessionRepo, interaction);
 
-  const agents = await loadAgents(services);
+  const agents = filterSelectableAgents(await loadAgents(services));
   const selectedAgent = agents.find((agent) => agent.name === requestedAgentName);
 
   if (selectedAgent === undefined) {
