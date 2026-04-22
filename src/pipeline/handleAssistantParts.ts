@@ -59,21 +59,21 @@ async function sendDispatchFailureFallback(
 }
 
 export function createStreamingAssistantDispatchState(options: {
-agent?: string;
-firstUserId?: string;
+  agent?: string;
+  firstUserId?: string;
   model?: string;
   sessionStartTime: number;
 }): StreamingAssistantDispatchState {
-return {
-sentByPartId: new Map<string, SentDiscordPart>(),
-partOrder: [],
-finalPartsByPartId: new Map<string, AssistantOutputPart>(),
-toolCallPartIdByCallId: new Map<string, string>(),
-agent: options.agent,
-firstUserId: options.firstUserId,
+  return {
+    sentByPartId: new Map<string, SentDiscordPart>(),
+    partOrder: [],
+    finalPartsByPartId: new Map<string, AssistantOutputPart>(),
+    toolCallPartIdByCallId: new Map<string, string>(),
+    agent: options.agent,
+    firstUserId: options.firstUserId,
     model: options.model,
     sessionStartTime: options.sessionStartTime,
-};
+  };
 }
 
 export async function handleStreamingAssistantPart(options: {
@@ -131,7 +131,7 @@ export async function handleStreamingAssistantPart(options: {
   if (part.type === 'step_finish') {
     const agent = state.agent ?? 'default';
     const model = state.model ?? 'default';
-    
+
     // Calculate total duration from session start
     const durationMs = Date.now() - state.sessionStartTime;
     const durationStr = formatDuration(durationMs);
