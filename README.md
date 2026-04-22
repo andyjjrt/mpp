@@ -65,10 +65,10 @@ bun run start
 
 ## Available Commands
 
-| Command | Description |
-|---------|-------------|
-| `/join` | Bot joins your current voice channel |
-| `/leave` | Bot leaves the voice channel |
+| Command  | Description                          |
+| -------- | ------------------------------------ |
+| `/join`  | Bot joins your current voice channel |
+| `/leave` | Bot leaves the voice channel         |
 | `/model` | Change the AI model for this session |
 | `/agent` | Change the AI agent for this session |
 
@@ -103,39 +103,39 @@ src/
 
 ## Scripts
 
-| Script | Description |
-|--------|-------------|
-| `bun run build` | Compile TypeScript to `dist/` |
-| `bun run typecheck` | Type check without emitting |
-| `bun run dev` | Watch mode with hot reload |
-| `bun run start` | Run compiled application |
-| `bun run register:commands` | Register Discord slash commands |
-| `bun run format` | Format staged files with Prettier |
-| `bun run format:all` | Format all files with Prettier |
-| `bun test` | Run tests |
+| Script                      | Description                       |
+| --------------------------- | --------------------------------- |
+| `bun run build`             | Compile TypeScript to `dist/`     |
+| `bun run typecheck`         | Type check without emitting       |
+| `bun run dev`               | Watch mode with hot reload        |
+| `bun run start`             | Run compiled application          |
+| `bun run register:commands` | Register Discord slash commands   |
+| `bun run format`            | Format staged files with Prettier |
+| `bun run format:all`        | Format all files with Prettier    |
+| `bun test`                  | Run tests                         |
 
 ## Environment Variables
 
 ### Required
 
-| Variable | Description |
-|----------|-------------|
-| `DISCORD_BOT_TOKEN` | Discord bot token |
-| `DISCORD_CLIENT_ID` | Discord application/client ID |
-| `DISCORD_MONITORED_CHANNEL_ID` | Channel to monitor for mentions |
-| `DISCORD_GUILD_ID` | Test guild ID for command registration |
-| `OPENCODE_API_KEY` | OpenCode API key |
+| Variable                       | Description                            |
+| ------------------------------ | -------------------------------------- |
+| `DISCORD_BOT_TOKEN`            | Discord bot token                      |
+| `DISCORD_CLIENT_ID`            | Discord application/client ID          |
+| `DISCORD_MONITORED_CHANNEL_ID` | Channel to monitor for mentions        |
+| `DISCORD_GUILD_ID`             | Test guild ID for command registration |
+| `OPENCODE_API_KEY`             | OpenCode API key                       |
 
 ### Optional
 
-| Variable | Default | Description |
-|----------|---------|-------------|
+| Variable            | Default                   | Description           |
+| ------------------- | ------------------------- | --------------------- |
 | `OPENCODE_BASE_URL` | `https://api.opencode.ai` | OpenCode API base URL |
-| `ASR_API_KEY` | - | ASR provider API key |
-| `ASR_BASE_URL` | - | ASR provider base URL |
-| `ASR_MODEL` | - | ASR model name |
-| `LOG_LEVEL` | `info` | Logging level |
-| `NODE_ENV` | `development` | Environment mode |
+| `ASR_API_KEY`       | -                         | ASR provider API key  |
+| `ASR_BASE_URL`      | -                         | ASR provider base URL |
+| `ASR_MODEL`         | -                         | ASR model name        |
+| `LOG_LEVEL`         | `info`                    | Logging level         |
+| `NODE_ENV`          | `development`             | Environment mode      |
 
 ## Architecture Highlights
 
@@ -161,14 +161,17 @@ src/
 ### Bot Permissions Required
 
 In the Discord Developer Portal, enable these intents:
+
 - Server Members Intent
 - Message Content Intent
 
 OAuth2 URL Generator scopes:
+
 - `bot`
 - `applications.commands`
 
 Bot permissions:
+
 - View Channels
 - Send Messages
 - Create Public Threads
@@ -181,15 +184,19 @@ Bot permissions:
 ## Troubleshooting
 
 ### Build fails
+
 Ensure Bun >= 1.3.12 is installed: `bun --version`
 
 ### Commands not appearing
+
 Run `bun run register:commands` after adding new commands
 
 ### Voice not connecting
+
 Check bot has `Connect` and `Speak` permissions in the voice channel
 
 ### SQLite errors
+
 Ensure `.data/` directory is writable
 
 ## License
