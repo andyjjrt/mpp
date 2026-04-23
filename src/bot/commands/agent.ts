@@ -19,6 +19,7 @@ interface Agent {
   name: string;
   description?: string;
   mode: 'subagent' | 'primary' | 'all';
+  hidden: boolean;
   builtIn: boolean;
   model?: { providerID: string; modelID: string };
 }
@@ -81,6 +82,7 @@ function normalizeAgent(input: unknown): Agent | null {
         ? input.mode
         : 'all',
     builtIn: input.builtIn === true,
+    hidden: input.hidden === true,
     model: normalizeAgentModel(input.model),
   };
 }
@@ -115,7 +117,7 @@ function formatAgentModel(agent: Agent): string {
 }
 
 function filterSelectableAgents(agents: readonly Agent[]): Agent[] {
-  return agents.filter((agent) => agent.mode === 'primary');
+  return agents.filter((agent) => agent.mode === 'primary' && agent.hidden === false);
 }
 
 function sortAgents(agents: readonly Agent[], currentAgent: string | null): Agent[] {
