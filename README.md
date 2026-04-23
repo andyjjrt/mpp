@@ -12,7 +12,8 @@ A Discord bot that bridges voice and text channels with OpenCode AI sessions. Me
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/) >= 1.3.12
+- Node.js >= 22.0.0
+- [pnpm](https://pnpm.io/) >= 9.0.0
 - Discord Bot Token
 - OpenCode API Key
 - (Optional) ASR Provider API credentials
@@ -27,7 +28,7 @@ git clone git@github.com:andyjjrt/mpp.git
 cd mpp
 
 # Install dependencies
-bun install
+pnpm install
 ```
 
 ### 2. Configure Environment
@@ -47,20 +48,22 @@ cp .env.example .env
 ### 3. Register Slash Commands
 
 ```bash
-bun run register:commands
+pnpm register:commands
 ```
 
 ### 4. Build and Run
 
 ```bash
 # Build TypeScript
-bun run build
+pnpm build
 
 # Start in development mode (with hot reload)
-bun run dev
+pnpm dev
 
 # Or start in production mode
-bun run start
+pnpm start
+
+# Or start in production mode
 ```
 
 ## Available Commands
@@ -103,16 +106,16 @@ src/
 
 ## Scripts
 
-| Script                      | Description                       |
-| --------------------------- | --------------------------------- |
-| `bun run build`             | Compile TypeScript to `dist/`     |
-| `bun run typecheck`         | Type check without emitting       |
-| `bun run dev`               | Watch mode with hot reload        |
-| `bun run start`             | Run compiled application          |
-| `bun run register:commands` | Register Discord slash commands   |
-| `bun run format`            | Format staged files with Prettier |
-| `bun run format:all`        | Format all files with Prettier    |
-| `bun test`                  | Run tests                         |
+| Script                   | Description                       |
+| ------------------------ | --------------------------------- |
+| `pnpm build`             | Compile TypeScript to `dist/`     |
+| `pnpm typecheck`         | Type check without emitting       |
+| `pnpm dev`               | Watch mode with hot reload        |
+| `pnpm start`             | Run compiled application          |
+| `pnpm register:commands` | Register Discord slash commands   |
+| `pnpm format`            | Format staged files with Prettier |
+| `pnpm format:all`        | Format all files with Prettier    |
+| `pnpm test`              | Run tests                         |
 
 ## Environment Variables
 
@@ -150,7 +153,8 @@ src/
 
 ### Prerequisites for Development
 
-- Bun 1.3.12 or higher
+- Node.js 22 or higher
+- pnpm 9 or higher
 - Node.js-compatible environment
 - Discord bot with appropriate permissions:
   - Send Messages
@@ -186,11 +190,11 @@ Bot permissions:
 
 ### Build fails
 
-Ensure Bun >= 1.3.12 is installed: `bun --version`
+Ensure Node.js >= 22 and pnpm are installed: `node -v` and `pnpm -v`
 
 ### Commands not appearing
 
-Run `bun run register:commands` after adding new commands
+Run `pnpm register:commands` after adding new commands
 
 ### Voice not connecting
 
@@ -208,7 +212,7 @@ UNLICENSED
 
 - `@opencode-ai/sdk` — AI session management
 - `discord.js` + `@discordjs/voice` — Discord bot and voice handling
-- `bun:sqlite` — Native SQLite (built into Bun)
+- `better-sqlite3` — SQLite3 library for Node.js
 - `pino` — Structured logging
 - `zod` — Runtime config validation
 - `opusscript` — Opus codec for voice

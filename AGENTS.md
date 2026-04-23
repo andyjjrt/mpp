@@ -5,39 +5,39 @@ Discord bot that bridges voice and text channels with OpenCode AI sessions. Ment
 ## Quick Start
 
 ```bash
-# Install dependencies (Bun required)
-bun install
+# Install dependencies (Node.js/pnpm required)
+pnpm install
 
 # Copy environment template
 cp .env.example .env
 # Edit .env with: DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, DISCORD_MONITORED_CHANNEL_ID, DISCORD_GUILD_ID, OPENCODE_API_KEY
 
 # Build TypeScript
-bun run build
+pnpm build
 
 # Register slash commands (/join, /leave) with Discord
-bun run register:commands
+pnpm register:commands
 
 # Start in dev mode (watch)
-bun run dev
+pnpm dev
 
 # Production start
-bun run start
+pnpm start
 ```
 
 ## Commands
 
-| Command                     | Description                     |
-| --------------------------- | ------------------------------- |
-| `bun run build`             | Compile TypeScript to `dist/`   |
-| `bun run typecheck`         | Type check without emitting     |
-| `bun run dev`               | Watch mode with hot reload      |
-| `bun run start`             | Run compiled `dist/app.js`      |
-| `bun run register:commands` | Register Discord slash commands |
+| Command                  | Description                     |
+| ------------------------ | ------------------------------- |
+| `pnpm build`             | Compile TypeScript to `dist/`   |
+| `pnpm typecheck`         | Type check without emitting     |
+| `pnpm dev`               | Watch mode with hot reload      |
+| `pnpm start`             | Run compiled `dist/app.js`      |
+| `pnpm register:commands` | Register Discord slash commands |
 
 ## Architecture Overview
 
-**Runtime**: Bun (>=1.3.12)  
+**Runtime**: Node.js (>=22), pnpm (>=9)  
 **Entry Point**: `src/app.ts` → creates Discord client, initializes SQLite, registers event handlers  
 **Build Output**: `dist/` (ES2022, NodeNext modules)
 
@@ -80,7 +80,7 @@ src/
 │   ├── client.ts             # ASR HTTP client
 │   └── transcribe.ts         # Transcription with retry/timeout/empty handling
 ├── storage/
-│   ├── db.ts                 # SQLite wrapper (bun:sqlite), WAL mode, thread_sessions table
+│   ├── db.ts                 # SQLite wrapper (better-sqlite3), WAL mode, thread_sessions table
 │   └── threadSessionRepo.ts  # thread_id ↔ session_id persistence
 └── utils/
     ├── logger.ts             # Pino logger, structured JSON logging
@@ -107,9 +107,9 @@ These constraints are hard requirements. Violations break core functionality.
 
 ### Code Formatting
 
-- **Always** run `bun run format` before completing any task that modifies source files
+- **Always** run `pnpm format` before completing any task that modifies source files
 - **Never** submit unformatted code — Prettier is a hard requirement for this codebase
-- Format the entire project with `bun run format:all` when requested
+- Format the entire project with `pnpm format:all` when requested
 
 ### Discord Message Constraints
 
@@ -168,10 +168,11 @@ This repo uses the `oh-my-openagent` plugin. Agent definitions are in `.opencode
 
 ```bash
 # Type check
-bun run typecheck
+pnpm typecheck
 
 # Build verification
-bun run build
+pnpm build
+
 
 # Manual test flow:
 # 1. Mention bot in monitored channel → thread created, session started
@@ -183,8 +184,8 @@ bun run build
 
 ## Common Issues
 
-**Build fails**: Ensure Bun >=1.3.12 (`bun --version`)  
-**Commands not appearing**: Run `bun run register:commands` after changing command definitions  
+**Build fails**: Ensure Node.js >=22 and pnpm >=9 are installed (`node -v`, `pnpm -v`)  
+**Commands not appearing**: Run `pnpm register:commands` after changing command definitions  
 **Voice not connecting**: Check bot has `Connect` and `Speak` permissions in voice channel  
 **SQLite errors**: Ensure `.data/` directory is writable
 
@@ -192,7 +193,7 @@ bun run build
 
 - `@opencode-ai/sdk` — AI session management (MUST use for all OpenCode interactions)
 - `discord.js` + `@discordjs/voice` — Discord bot and voice handling
-- `bun:sqlite` — Native SQLite (no external dep)
+- `better-sqlite3` — SQLite3 library for Node.js (no external dep)
 - `pino` — Structured logging
 - `zod` — Runtime config validation
 - `opusscript` — Opus codec for voice (lightweight, no native deps)
