@@ -43,6 +43,8 @@ export interface DiscordRequirements {
 export interface AppConfig {
   nodeEnv: NodeEnvironment;
   logLevel: LogLevel;
+  enableCompletionMention: boolean;
+  enableCompletionReport: boolean;
   discord: {
     botToken: string;
     clientId: string;

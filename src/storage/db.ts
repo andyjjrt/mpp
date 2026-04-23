@@ -28,7 +28,7 @@ interface BunSqliteDatabase {
 }
 
 const THREAD_SESSIONS_SCHEMA =
-  'CREATE TABLE IF NOT EXISTS thread_sessions (thread_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, first_user_id TEXT NULL, model_provider_id TEXT NULL, model_id TEXT NULL, agent_name TEXT NULL);';
+  'CREATE TABLE IF NOT EXISTS thread_sessions (thread_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, first_user_id TEXT NULL, model_provider_id TEXT NULL, model_id TEXT NULL, agent_name TEXT NULL, mentionables_json TEXT NULL);';
 
 function ensureDatabaseDirectory(databaseFilePath: string): void {
   if (databaseFilePath === ':memory:') {
@@ -64,6 +64,11 @@ function migrateSchema(database: ThreadSessionDatabase): void {
   }
   try {
     database.exec('ALTER TABLE thread_sessions ADD COLUMN agent_name TEXT NULL');
+  } catch {
+    /* ignore if already exists */
+  }
+  try {
+    database.exec('ALTER TABLE thread_sessions ADD COLUMN mentionables_json TEXT NULL');
   } catch {
     /* ignore if already exists */
   }
