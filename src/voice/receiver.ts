@@ -165,7 +165,13 @@ export async function startGuildVoiceReceiver(
   function subscribeToSpeaker(speakerId: string): void {
     const normalizedSpeakerId = speakerId.trim();
 
-    logger.debug({ speakerId: normalizedSpeakerId }, 'Speaking started, subscribing to speaker');
+    logger.debug(
+      {
+        speakerId: normalizedSpeakerId,
+        totalSubscriptions: subscriptions.size,
+      },
+      'Speaking START event received - subscribing to speaker'
+    );
 
     if (normalizedSpeakerId.length === 0 || subscriptions.has(normalizedSpeakerId)) {
       logger.debug(
@@ -191,7 +197,13 @@ export async function startGuildVoiceReceiver(
       });
 
       subscriptions.set(normalizedSpeakerId, { stream, decoder });
-      logger.debug({ speakerId: normalizedSpeakerId }, 'Subscribed to speaker audio stream');
+      logger.debug(
+        {
+          speakerId: normalizedSpeakerId,
+          streamDestroyed: stream.destroyed,
+        },
+        'Subscribed to speaker audio stream - stream created'
+      );
 
       decoder.on('data', (chunk: Buffer) => {
         if (stream.destroyed || chunk.length === 0) {
@@ -227,9 +239,9 @@ export async function startGuildVoiceReceiver(
           return;
         }
 
-        logger.trace(
+        logger.debug(
           { speakerId: normalizedSpeakerId, chunkSize: chunk.length },
-          'Received Opus audio chunk'
+          'Received Opus audio chunk from stream'
         );
         decoder.write(chunk);
       });
@@ -291,6 +303,25 @@ export async function startGuildVoiceReceiver(
     'end',
     activeReceiver.speakingEndListener
   );
+
+  // Add debug logging for speaking events
+  runtime.connection.receiver.speaking.on('start', (userId) => {
+    logger.debug({ userId }, 'Speaking event: START received from Discord');
+  });
+
+  // Inspect connection state for debugging
+  const connection = runtime.connection as VoiceConnection;
+  logger.debug(
+    {
+      guildId,
+      connectionState: connection.state.status,
+      hasReceiver: !!connection.receiver,
+      // @ts-ignore - accessing internal for debug
+      ssrc: connection.state.subscription?.connectionData?.ssrc || 'unknown',
+    },
+    'Voice connection debug info'
+  );
+
   activeReceivers.set(guildId, activeReceiver);
   updateRecordingState(runtimes, guildId, true, options.onError);
 
