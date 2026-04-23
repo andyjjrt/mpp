@@ -1,4 +1,3 @@
-import './bun-polyfills.js';
 import { join } from 'node:path';
 
 import { Client, Events } from 'discord.js';
