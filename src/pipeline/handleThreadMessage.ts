@@ -32,6 +32,8 @@ const UNKNOWN_SESSION_ERROR_MESSAGE = 'OpenCode session ended with an unknown er
 export interface HandleThreadMessageDependencies {
   opencode: OpencodeSdkContext;
   threadSessionRepo: ThreadSessionRepo;
+  enableCompletionMention: boolean;
+  enableCompletionReport: boolean;
 }
 
 export interface HandleThreadMessageOptions {
@@ -119,7 +121,43 @@ function collectSentDiscordParts(state: StreamingAssistantDispatchState): SentDi
 
   return sentParts;
 }
+async function fetchAllThreadParticipantIds(thread: AnyThreadChannel): Promise<string[]> {
+  const participantIds = new Set<string>();
+  let lastMessageId: string | undefined;
+  const batchSize = 100;
+  // Discord returns messages in descending order (newest first)
+  // Keep fetching until we have all messages
+  while (true) {
+    const messages = await thread.messages.fetch({
+      limit: batchSize,
+      before: lastMessageId,
+    });
+    if (messages.size === 0) {
+      break;
+    }
+    for (const message of messages.values()) {
+      // Skip bot messages
+      if (message.author.bot) {
+        continue;
+      }
+      participantIds.add(message.author.id);
+      lastMessageId = message.id;
+    }
+    // If we got fewer than batchSize, we've reached the end
+    if (messages.size < batchSize) {
+      break;
+    }
+  }
+  return Array.from(participantIds);
+}
 
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
+}
 function getSessionErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
     const normalizedMessage = error.trim();
@@ -353,17 +391,45 @@ export async function handleThreadMessage(
     await sendRepliesToThread(options.thread, EMPTY_ASSISTANT_OUTPUT_FALLBACK);
   }
 
-  // Send completion info if the last part is step_finish
+  // Send completion mentions if the last part is step_finish
   const lastPart = finalParts[finalParts.length - 1];
   if (
     lastPart?.type === 'step_finish' &&
     dispatchState.completionInfo &&
-    dispatchState.firstUserId
+    dispatchState.firstUserId &&
+    dependencies.enableCompletionMention
+  ) {
+    // Fetch all unique human participants from thread history
+    const participantIds = await fetchAllThreadParticipantIds(options.thread);
+
+    // Ensure first user is included (even if they haven't posted in the thread yet)
+    const allUserIds = [dispatchState.firstUserId, ...participantIds];
+    const uniqueUserIds = [...new Set(allUserIds)];
+
+    // Chunk mentions if more than 100 users (Discord limit)
+    const MAX_MENTIONS_PER_MESSAGE = 100;
+    const userIdChunks = chunkArray(uniqueUserIds, MAX_MENTIONS_PER_MESSAGE);
+
+    for (const chunk of userIdChunks) {
+      const mentionMessage = chunk.map((id) => `<@${id}>`).join(' ') + ' 已完成';
+      await sendRepliesToThread(options.thread, mentionMessage, {
+        parse: [],
+        users: chunk,
+        roles: [],
+      });
+    }
+  }
+
+  // Send completion report (model/agent/time) separately if enabled
+  if (
+    lastPart?.type === 'step_finish' &&
+    dispatchState.completionInfo &&
+    dependencies.enableCompletionReport
   ) {
     const { agent, model, duration } = dispatchState.completionInfo;
     const durationDisplay = duration ? ` • ${duration}` : '';
-    const completionMessage = `<@${dispatchState.firstUserId}> 已完成\n-# ${agent} • ${model}${durationDisplay}`;
-    await sendRepliesToThread(options.thread, completionMessage);
+    const reportMessage = `-# ${agent} • ${model}${durationDisplay}`;
+    await sendRepliesToThread(options.thread, reportMessage);
   }
 
   const promptResult: PromptStreamResult = {

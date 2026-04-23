@@ -197,6 +197,8 @@ export async function handleVoiceSegment(
     {
       opencode: dependencies.opencode,
       threadSessionRepo: dependencies.threadSessionRepo,
+      enableCompletionMention: dependencies.config.enableCompletionMention,
+      enableCompletionReport: dependencies.config.enableCompletionReport,
     },
     {
       thread,
