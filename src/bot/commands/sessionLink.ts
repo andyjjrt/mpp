@@ -26,6 +26,7 @@ interface Session {
   id: string;
   title?: string;
   directory?: string;
+  parentID?: string;
 }
 
 function createSuccessEmbed(sessionId: string): EmbedBuilder {
@@ -85,7 +86,7 @@ async function loadSessions(services: SessionLinkCommandServices): Promise<Sessi
 
   // Filter sessions by configured directory if set
   if (configDirectory) {
-    return sessions.filter((session) => session.directory === configDirectory);
+    return sessions.filter((session) => session.directory === configDirectory && !session.parentID);
   }
 
   return sessions;
