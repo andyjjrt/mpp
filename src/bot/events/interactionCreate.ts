@@ -11,7 +11,7 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from 'discord.js';
-import type { APIComponentInContainer, APIMessageTopLevelComponent } from 'discord-api-types/v10';
+import type { APIMessageTopLevelComponent } from 'discord-api-types/v10';
 import {
   QUESTION_CUSTOM_ANSWER_FIELD_ID,
   createQuestionAnswerModal,
@@ -30,10 +30,16 @@ import type { ThreadTaskQueue } from '../../pipeline/enqueue.js';
 import type { ThreadSessionRepo } from '../../storage/threadSessionRepo.js';
 import { RuntimeError, toError } from '../../utils/errors.js';
 import { createLogger } from '../../utils/logger.js';
+import { handleAskAutocomplete, handleAskCommand } from '../commands/ask.js';
 import { handleAgentAutocomplete, handleAgentCommand } from '../commands/agent.js';
 import { handleJoinCommand } from '../commands/join.js';
 import { handleLeaveCommand } from '../commands/leave.js';
 import { handleModelAutocomplete, handleModelCommand } from '../commands/model.js';
+
+import {
+  handleSessionLinkAutocomplete,
+  handleSessionLinkCommand,
+} from '../commands/sessionLink.js';
 
 const logger = createLogger({ module: 'app' });
 
@@ -66,27 +72,35 @@ export type InteractionAutocompleteHandler = (
 ) => Promise<void>;
 
 export interface InteractionCommandHandlers {
+  ask: InteractionCommandHandler;
   agent: InteractionCommandHandler;
   join: InteractionCommandHandler;
   leave: InteractionCommandHandler;
   model: InteractionCommandHandler;
+  'session-link': InteractionCommandHandler;
 }
 
 export interface InteractionAutocompleteHandlers {
+  ask: InteractionAutocompleteHandler;
   agent: InteractionAutocompleteHandler;
   model: InteractionAutocompleteHandler;
+  'session-link': InteractionAutocompleteHandler;
 }
 
 const defaultInteractionCommandHandlers: InteractionCommandHandlers = {
+  ask: handleAskCommand,
   agent: handleAgentCommand,
   join: handleJoinCommand,
   leave: handleLeaveCommand,
   model: handleModelCommand,
+  'session-link': handleSessionLinkCommand,
 };
 
 const defaultInteractionAutocompleteHandlers: InteractionAutocompleteHandlers = {
+  ask: handleAskAutocomplete,
   agent: handleAgentAutocomplete,
   model: handleModelAutocomplete,
+  'session-link': handleSessionLinkAutocomplete,
 };
 
 function resolveInteractionCommandHandler(
@@ -94,6 +108,8 @@ function resolveInteractionCommandHandler(
   commandHandlers: InteractionCommandHandlers
 ): InteractionCommandHandler | null {
   switch (commandName) {
+    case 'ask':
+      return commandHandlers.ask;
     case 'agent':
       return commandHandlers.agent;
     case 'join':
@@ -102,6 +118,8 @@ function resolveInteractionCommandHandler(
       return commandHandlers.leave;
     case 'model':
       return commandHandlers.model;
+    case 'session-link':
+      return commandHandlers['session-link'];
     default:
       return null;
   }
@@ -112,10 +130,14 @@ function resolveInteractionAutocompleteHandler(
   autocompleteHandlers: InteractionAutocompleteHandlers
 ): InteractionAutocompleteHandler | null {
   switch (commandName) {
+    case 'ask':
+      return autocompleteHandlers.ask;
     case 'agent':
       return autocompleteHandlers.agent;
     case 'model':
       return autocompleteHandlers.model;
+    case 'session-link':
+      return autocompleteHandlers['session-link'];
     default:
       return null;
   }

@@ -112,6 +112,14 @@ const environmentSchema = z.object({
   ASR_MODEL: z.string().trim().min(1, 'ASR_MODEL cannot be empty').optional(),
   LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
   NODE_ENV: z.enum(NODE_ENVIRONMENTS).default('development'),
+  ENABLE_COMPLETION_MENTION: z.preprocess(
+    (val) => (typeof val === 'string' ? val.toLowerCase() === 'true' : Boolean(val)),
+    z.boolean().default(false)
+  ),
+  ENABLE_COMPLETION_REPORT: z.preprocess(
+    (val) => (typeof val === 'string' ? val.toLowerCase() === 'true' : Boolean(val)),
+    z.boolean().default(false)
+  ),
 });
 
 function formatIssues(error: z.ZodError): string[] {
@@ -135,6 +143,8 @@ export function loadConfig(): AppConfig {
   return {
     nodeEnv: env.NODE_ENV,
     logLevel: env.LOG_LEVEL,
+    enableCompletionMention: env.ENABLE_COMPLETION_MENTION,
+    enableCompletionReport: env.ENABLE_COMPLETION_REPORT,
     discord: {
       botToken: env.DISCORD_BOT_TOKEN,
       clientId: env.DISCORD_CLIENT_ID,

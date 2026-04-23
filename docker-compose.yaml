@@ -1,0 +1,31 @@
+services:
+  # opencode:
+  #   image: ghcr.io/anomalyco/opencode
+  #   command: ["serve", "--hostname", "0.0.0.0", "--port", "55688"]
+  #   volumes:
+  #     - ${OPENCODE_DIRECTORY:-.}:/app
+  #     - ~/.config/opencode/opencode.json:/root/.config/opencode/opencode.json
+  #   restart: unless-stopped
+  #   ports:
+  #     - 55688:55688
+
+  mpp:
+    image: mpp
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_MONITORED_CHANNEL_ID: ${DISCORD_MONITORED_CHANNEL_ID}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      OPENCODE_BASE_URL: http://host.docker.internal:55688
+      OPENCODE_DIRECTORY: ${OPENCODE_DIRECTORY:-}
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-}
+      ASR_API_KEY: ${ASR_API_KEY:-}
+      ASR_BASE_URL: ${ASR_BASE_URL:-}
+      ASR_MODEL: ${ASR_MODEL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: ${NODE_ENV:-development}
+      ENABLE_COMPLETION_MENTION: ${ENABLE_COMPLETION_MENTION:-false}
+      ENABLE_COMPLETION_REPORT: ${ENABLE_COMPLETION_REPORT:-true}
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'

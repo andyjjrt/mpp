@@ -1,5 +1,5 @@
-import { Database as BunDatabase } from 'bun:sqlite';
-import { expect, test, describe, beforeEach, afterEach } from 'bun:test';
+import Database from 'better-sqlite3';
+import { expect, test, describe, beforeEach, afterEach } from 'vitest';
 import { initializeDatabase } from '../../src/storage/db.js';
 import { createThreadSessionRepo } from '../../src/storage/threadSessionRepo.js';
 import { unlinkSync, existsSync } from 'node:fs';
@@ -87,7 +87,7 @@ describe('Database Schema & Repository Preferences', () => {
 
     try {
       // 1. Create DB with old schema manually
-      const rawDb = new BunDatabase(PERSISTENT_DB);
+      const rawDb = new Database(PERSISTENT_DB);
       rawDb.exec(`
         CREATE TABLE thread_sessions (
           thread_id TEXT PRIMARY KEY,
@@ -120,5 +120,31 @@ describe('Database Schema & Repository Preferences', () => {
     } finally {
       if (existsSync(PERSISTENT_DB)) unlinkSync(PERSISTENT_DB);
     }
+  });
+  test('bind should create and find session binding', () => {
+    const threadId = 'bind-test-thread';
+    repo.bind(threadId, 'session-bind-test');
+    expect(repo.findSessionId(threadId)).toBe('session-bind-test');
+  });
+
+  test('exists should return correct boolean', () => {
+    const threadId = 'exists-test-thread';
+    expect(repo.exists(threadId)).toBe(false);
+    repo.bind(threadId, 'session-exists-test');
+    expect(repo.exists(threadId)).toBe(true);
+  });
+
+  test('setFirstUserId should persist and be findable', () => {
+    const threadId = 'firstuser-test-thread';
+    repo.bind(threadId, 'session-firstuser-test');
+    repo.setFirstUserId(threadId, 'user-123');
+    expect(repo.findFirstUserId(threadId)).toBe('user-123');
+  });
+
+  test('initializeDatabase should be idempotent', () => {
+    // Initialize twice - should not throw
+    const db2 = initializeDatabase(DB_PATH);
+    expect(db2).toBeDefined();
+    db2.close();
   });
 });

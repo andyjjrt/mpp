@@ -1,4 +1,10 @@
-import { EmbedBuilder, MessageFlags, type AnyThreadChannel, type Message } from 'discord.js';
+import {
+  EmbedBuilder,
+  MessageFlags,
+  type AllowedMentionsTypes,
+  type AnyThreadChannel,
+  type Message,
+} from 'discord.js';
 import type { APIMessageTopLevelComponent } from 'discord-api-types/v10';
 
 import type { AssistantOutputPart } from '../opencode/parts.js';
@@ -59,6 +65,7 @@ interface DiscordMessageChunk {
   content: string;
   components?: readonly APIMessageTopLevelComponent[];
   usesComponentsV2?: boolean;
+  allowedMentions?: { parse?: AllowedMentionsTypes[]; users?: string[]; roles?: string[] };
 }
 
 function getRenderedPartChunks(renderedPart: RenderedDiscordPart): DiscordMessageChunk[] {
@@ -95,12 +102,12 @@ async function sendContentChunk(
         ? {
             components: chunk.components,
             flags: MessageFlags.IsComponentsV2,
-            allowedMentions: { parse: [] },
+            allowedMentions: chunk.allowedMentions ?? { parse: [] },
           }
         : {
             content: chunk.content,
             components: chunk.components,
-            allowedMentions: { parse: [] },
+            allowedMentions: chunk.allowedMentions ?? { parse: [] },
           }
     );
   } catch (error) {
@@ -167,7 +174,8 @@ async function sendContentChunks(
   thread: AnyThreadChannel,
   content: string,
   components?: readonly APIMessageTopLevelComponent[],
-  usesComponentsV2?: boolean
+  usesComponentsV2?: boolean,
+  allowedMentions?: { parse?: AllowedMentionsTypes[]; users?: string[]; roles?: string[] }
 ): Promise<Message<true>[]> {
   const chunks = getRenderedPartChunks({
     id: 'standalone-reply',
@@ -180,7 +188,7 @@ async function sendContentChunks(
   const replies: Message<true>[] = [];
 
   for (const chunk of chunks) {
-    replies.push(await sendContentChunk(thread, chunk));
+    replies.push(await sendContentChunk(thread, { ...chunk, allowedMentions }));
   }
 
   return replies;
@@ -343,11 +351,12 @@ export async function upsertAssistantReplyPart(
 
 export async function sendRepliesToThread(
   thread: AnyThreadChannel,
-  content: string
+  content: string,
+  allowedMentions?: { parse?: AllowedMentionsTypes[]; users?: string[]; roles?: string[] }
 ): Promise<readonly Message<true>[]> {
   assertThreadSendable(thread);
   await ensureThreadOpen(thread);
-  return sendContentChunks(thread, content);
+  return sendContentChunks(thread, content, undefined, undefined, allowedMentions);
 }
 
 export async function sendEmbedRepliesToThread(

@@ -1,4 +1,4 @@
-import { Database as BunDatabase } from 'bun:sqlite';
+import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -16,19 +16,20 @@ export interface ThreadSessionDatabase {
   close(): void;
 }
 
-interface BunSqliteStatement<Row = unknown> {
+interface BetterSqliteStatement<Row = unknown> {
   run(...parameters: readonly unknown[]): unknown;
-  get(...parameters: readonly unknown[]): Row | null;
+  get(...parameters: readonly unknown[]): Row | undefined;
 }
 
-interface BunSqliteDatabase {
+interface BetterSqliteDatabase {
   exec(source: string): void;
-  query<Row = unknown>(source: string): BunSqliteStatement<Row>;
+  prepare<Row = unknown>(source: string): BetterSqliteStatement<Row>;
+  pragma(source: string): unknown;
   close(): void;
 }
 
 const THREAD_SESSIONS_SCHEMA =
-  'CREATE TABLE IF NOT EXISTS thread_sessions (thread_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, first_user_id TEXT NULL, model_provider_id TEXT NULL, model_id TEXT NULL, agent_name TEXT NULL);';
+  'CREATE TABLE IF NOT EXISTS thread_sessions (thread_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, first_user_id TEXT NULL, model_provider_id TEXT NULL, model_id TEXT NULL, agent_name TEXT NULL, mentionables_json TEXT NULL);';
 
 function ensureDatabaseDirectory(databaseFilePath: string): void {
   if (databaseFilePath === ':memory:') {
@@ -67,14 +68,18 @@ function migrateSchema(database: ThreadSessionDatabase): void {
   } catch {
     /* ignore if already exists */
   }
+  try {
+    database.exec('ALTER TABLE thread_sessions ADD COLUMN mentionables_json TEXT NULL');
+  } catch {
+    /* ignore if already exists */
+  }
 }
 
-class BunThreadSessionDatabase implements ThreadSessionDatabase {
-  public constructor(private readonly database: BunSqliteDatabase) {}
+class BetterSqliteThreadSessionDatabase implements ThreadSessionDatabase {
+  public constructor(private readonly database: BetterSqliteDatabase) {}
 
   public pragma(source: string): unknown {
-    this.database.exec('PRAGMA ' + source);
-    return undefined;
+    return this.database.pragma(source);
   }
 
   public exec(source: string): this {
@@ -84,11 +89,11 @@ class BunThreadSessionDatabase implements ThreadSessionDatabase {
   }
 
   public prepare<Row = unknown>(source: string): SqliteStatement<Row> {
-    const statement = this.database.query<Row>(source);
+    const statement = this.database.prepare<Row>(source);
 
     return {
       run: (...parameters) => statement.run(...parameters),
-      get: (...parameters) => statement.get(...parameters) ?? undefined,
+      get: (...parameters) => statement.get(...parameters),
     };
   }
 
@@ -98,11 +103,11 @@ class BunThreadSessionDatabase implements ThreadSessionDatabase {
 }
 
 export function initializeDatabase(databaseFilePath: string): ThreadSessionDatabase {
-  let database: BunThreadSessionDatabase | undefined;
+  let database: BetterSqliteThreadSessionDatabase | undefined;
 
   try {
     ensureDatabaseDirectory(databaseFilePath);
-    database = new BunThreadSessionDatabase(new BunDatabase(databaseFilePath));
+    database = new BetterSqliteThreadSessionDatabase(new Database(databaseFilePath));
     configureDatabase(database);
     createThreadSessionsTable(database);
     migrateSchema(database);

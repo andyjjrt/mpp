@@ -29,8 +29,33 @@ const commands = [
     .addStringOption((opt) =>
       opt.setName('name').setDescription('Agent name').setAutocomplete(true).setRequired(false)
     ),
+  new SlashCommandBuilder()
+    .setName('ask')
+    .setDescription('Start an AI conversation in a new thread')
+    .addStringOption((opt) =>
+      opt.setName('prompt').setDescription('Your message to the AI').setRequired(true)
+    )
+    .addStringOption((opt) =>
+      opt.setName('agent').setDescription('Agent name').setAutocomplete(true).setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName('model')
+        .setDescription('Model in provider/model format')
+        .setAutocomplete(true)
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
+    .setName('session-link')
+    .setDescription('Link an existing OpenCode session to this thread')
+    .addStringOption((opt) =>
+      opt
+        .setName('session_id')
+        .setDescription('The OpenCode session ID to link')
+        .setAutocomplete(true)
+        .setRequired(true)
+    ),
 ].map((command) => command.toJSON());
-
 function resolveGuildId(guildId: string | undefined): string {
   if (guildId === undefined) {
     throw new ConfigValidationError(['DISCORD_GUILD_ID: required for slash-command registration']);
