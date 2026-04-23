@@ -1,30 +1,36 @@
 # Build stage
-FROM oven/bun:1.3.12-slim AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
+# Enable pnpm via corepack
+RUN corepack enable
+
 # Copy dependency files first for better caching
-COPY package.json bun.lock* ./
+COPY package.json pnpm-lock.yaml* ./
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
 # Build TypeScript
-RUN bun run build
+RUN pnpm build
 
 # Production stage
-FROM oven/bun:1.3.12-slim
+FROM node:22-slim
 
 WORKDIR /app
 
+# Enable pnpm via corepack
+RUN corepack enable
+
 # Copy package files
-COPY package.json bun.lock* ./
+COPY package.json pnpm-lock.yaml* ./
 
 # Install production dependencies only
-RUN bun install --frozen-lockfile --production
+RUN pnpm install --frozen-lockfile --prod
 
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
@@ -36,4 +42,4 @@ RUN mkdir -p .data
 # Environment variables are passed at runtime
 
 # Run the bot
-CMD ["bun", "dist/app.js"]
+CMD ["node", "dist/app.js"]
