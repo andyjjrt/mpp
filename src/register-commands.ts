@@ -45,8 +45,17 @@ const commands = [
         .setAutocomplete(true)
         .setRequired(false)
     ),
+  new SlashCommandBuilder()
+    .setName('session-link')
+    .setDescription('Link an existing OpenCode session to this thread')
+    .addStringOption((opt) =>
+      opt
+        .setName('session_id')
+        .setDescription('The OpenCode session ID to link')
+        .setAutocomplete(true)
+        .setRequired(true)
+    ),
 ].map((command) => command.toJSON());
-
 function resolveGuildId(guildId: string | undefined): string {
   if (guildId === undefined) {
     throw new ConfigValidationError(['DISCORD_GUILD_ID: required for slash-command registration']);

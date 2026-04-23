@@ -36,6 +36,11 @@ import { handleJoinCommand } from '../commands/join.js';
 import { handleLeaveCommand } from '../commands/leave.js';
 import { handleModelAutocomplete, handleModelCommand } from '../commands/model.js';
 
+import {
+  handleSessionLinkAutocomplete,
+  handleSessionLinkCommand,
+} from '../commands/sessionLink.js';
+
 const logger = createLogger({ module: 'app' });
 
 interface InteractionCreateServices {
@@ -72,12 +77,14 @@ export interface InteractionCommandHandlers {
   join: InteractionCommandHandler;
   leave: InteractionCommandHandler;
   model: InteractionCommandHandler;
+  'session-link': InteractionCommandHandler;
 }
 
 export interface InteractionAutocompleteHandlers {
   ask: InteractionAutocompleteHandler;
   agent: InteractionAutocompleteHandler;
   model: InteractionAutocompleteHandler;
+  'session-link': InteractionAutocompleteHandler;
 }
 
 const defaultInteractionCommandHandlers: InteractionCommandHandlers = {
@@ -86,12 +93,14 @@ const defaultInteractionCommandHandlers: InteractionCommandHandlers = {
   join: handleJoinCommand,
   leave: handleLeaveCommand,
   model: handleModelCommand,
+  'session-link': handleSessionLinkCommand,
 };
 
 const defaultInteractionAutocompleteHandlers: InteractionAutocompleteHandlers = {
   ask: handleAskAutocomplete,
   agent: handleAgentAutocomplete,
   model: handleModelAutocomplete,
+  'session-link': handleSessionLinkAutocomplete,
 };
 
 function resolveInteractionCommandHandler(
@@ -109,6 +118,8 @@ function resolveInteractionCommandHandler(
       return commandHandlers.leave;
     case 'model':
       return commandHandlers.model;
+    case 'session-link':
+      return commandHandlers['session-link'];
     default:
       return null;
   }
@@ -125,6 +136,8 @@ function resolveInteractionAutocompleteHandler(
       return autocompleteHandlers.agent;
     case 'model':
       return autocompleteHandlers.model;
+    case 'session-link':
+      return autocompleteHandlers['session-link'];
     default:
       return null;
   }

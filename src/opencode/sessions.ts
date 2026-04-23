@@ -174,3 +174,18 @@ export async function promptSessionText(
     parts: createTextPromptParts(options.text),
   });
 }
+
+export async function getSession(context: OpencodeSdkContext, sessionId: string): Promise<Session> {
+  const normalizedSessionId = requireNonEmptyString('sessionId', sessionId);
+
+  try {
+    // SDK returns Session directly at runtime
+    const response = await context.client.session.get({
+      ...OPENCODE_REQUEST_OPTIONS,
+      path: { id: normalizedSessionId },
+    });
+    return response as unknown as Session;
+  } catch (error) {
+    throw new RuntimeError(`Session '${normalizedSessionId}' not found or inaccessible`);
+  }
+}

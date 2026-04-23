@@ -6,6 +6,7 @@ export interface OpencodeSdkContext {
   client: OpencodeClient;
   baseUrl: string;
   authorizationHeader?: string;
+  directory?: string;
 }
 
 function trimTrailingSlashes(value: string): string {
@@ -38,6 +39,7 @@ export async function createOpencodeSdkContext(
   return {
     baseUrl,
     authorizationHeader,
+    directory,
     client: createOpencodeClient({
       baseUrl,
       directory,

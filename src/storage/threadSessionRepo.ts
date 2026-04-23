@@ -8,9 +8,11 @@ interface ThreadSessionRow {
   model_id: string | null;
   agent_name: string | null;
   first_user_id: string | null;
+  mentionables_json: string | null;
 }
 
 export type ThreadModelPreference = { providerID: string; modelID: string };
+
 export type ThreadPromptPreferences = { model: ThreadModelPreference | null; agent: string | null };
 
 export interface ThreadSessionRepo {
@@ -52,6 +54,7 @@ export function createThreadSessionRepo(database: ThreadSessionDatabase): Thread
   const findPreferencesStatement = database.prepare<ThreadSessionRow>(
     'SELECT model_provider_id, model_id, agent_name FROM thread_sessions WHERE thread_id = ?'
   );
+
   const setModelStatement = database.prepare(
     'UPDATE thread_sessions SET model_provider_id = ?, model_id = ? WHERE thread_id = ?'
   );
