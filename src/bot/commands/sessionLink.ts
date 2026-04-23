@@ -200,6 +200,13 @@ export async function handleSessionLinkCommand(
       reason: 'Session link thread creation',
     });
 
+    // Add the user who triggered the command to the thread
+    try {
+      await thread.members.add(interaction.user.id);
+    } catch {
+      // Ignore errors when adding member (e.g., user not in guild)
+    }
+
     // Validate the session exists in OpenCode
     await getSession(services.opencodeContext, sessionId);
 

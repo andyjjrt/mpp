@@ -122,32 +122,17 @@ function collectSentDiscordParts(state: StreamingAssistantDispatchState): SentDi
   return sentParts;
 }
 async function fetchAllThreadParticipantIds(thread: AnyThreadChannel): Promise<string[]> {
+  const members = await thread.members.fetch();
   const participantIds = new Set<string>();
-  let lastMessageId: string | undefined;
-  const batchSize = 100;
-  // Discord returns messages in descending order (newest first)
-  // Keep fetching until we have all messages
-  while (true) {
-    const messages = await thread.messages.fetch({
-      limit: batchSize,
-      before: lastMessageId,
-    });
-    if (messages.size === 0) {
-      break;
+
+  for (const member of members.values()) {
+    if (member.user && member.user.bot) {
+      continue;
     }
-    for (const message of messages.values()) {
-      // Skip bot messages
-      if (message.author.bot) {
-        continue;
-      }
-      participantIds.add(message.author.id);
-      lastMessageId = message.id;
-    }
-    // If we got fewer than batchSize, we've reached the end
-    if (messages.size < batchSize) {
-      break;
-    }
+
+    participantIds.add(member.id);
   }
+
   return Array.from(participantIds);
 }
 
@@ -411,7 +396,7 @@ export async function handleThreadMessage(
     const userIdChunks = chunkArray(uniqueUserIds, MAX_MENTIONS_PER_MESSAGE);
 
     for (const chunk of userIdChunks) {
-      const mentionMessage = chunk.map((id) => `<@${id}>`).join(' ') + ' 已完成';
+      const mentionMessage = chunk.map((id) => `<@${id}>`).join(' ');
       await sendRepliesToThread(options.thread, mentionMessage, {
         parse: [],
         users: chunk,

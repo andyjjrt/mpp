@@ -34,12 +34,23 @@ function validateReplyContent(content: string): string {
 
 export async function createSessionThreadFromMessage(
   message: Message<true>,
-  title: string
+  title: string,
+  firstUserId?: string
 ): Promise<PublicThreadChannel<false>> {
   const normalizedTitle = normalizeThreadTitle(title);
 
   try {
-    return await message.startThread({ name: normalizedTitle });
+    const thread = await message.startThread({ name: normalizedTitle });
+
+    if (firstUserId !== undefined) {
+      try {
+        await thread.members.add(firstUserId);
+      } catch {
+        // Ignore errors when adding member (e.g., user not in guild)
+      }
+    }
+
+    return thread;
   } catch (error) {
     throw new RuntimeError(
       `Failed to create session thread "${normalizedTitle}" from message "${message.id}": ${toError(error).message}`

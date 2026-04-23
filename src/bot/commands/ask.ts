@@ -247,7 +247,8 @@ export async function handleAskCommand(
     });
     const thread = await createSessionThreadFromMessage(
       placeholderMessage,
-      resolveThreadTitle(prompt, interaction.id)
+      resolveThreadTitle(prompt, interaction.id),
+      interaction.user.id
     );
 
     await enqueueThreadSetup(services, interaction, thread.id, thread.name, {
