@@ -11,7 +11,7 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from 'discord.js';
-import type { APIComponentInContainer, APIMessageTopLevelComponent } from 'discord-api-types/v10';
+import type { APIMessageTopLevelComponent } from 'discord-api-types/v10';
 import {
   QUESTION_CUSTOM_ANSWER_FIELD_ID,
   createQuestionAnswerModal,
@@ -30,6 +30,7 @@ import type { ThreadTaskQueue } from '../../pipeline/enqueue.js';
 import type { ThreadSessionRepo } from '../../storage/threadSessionRepo.js';
 import { RuntimeError, toError } from '../../utils/errors.js';
 import { createLogger } from '../../utils/logger.js';
+import { handleAskAutocomplete, handleAskCommand } from '../commands/ask.js';
 import { handleAgentAutocomplete, handleAgentCommand } from '../commands/agent.js';
 import { handleJoinCommand } from '../commands/join.js';
 import { handleLeaveCommand } from '../commands/leave.js';
@@ -66,6 +67,7 @@ export type InteractionAutocompleteHandler = (
 ) => Promise<void>;
 
 export interface InteractionCommandHandlers {
+  ask: InteractionCommandHandler;
   agent: InteractionCommandHandler;
   join: InteractionCommandHandler;
   leave: InteractionCommandHandler;
@@ -73,11 +75,13 @@ export interface InteractionCommandHandlers {
 }
 
 export interface InteractionAutocompleteHandlers {
+  ask: InteractionAutocompleteHandler;
   agent: InteractionAutocompleteHandler;
   model: InteractionAutocompleteHandler;
 }
 
 const defaultInteractionCommandHandlers: InteractionCommandHandlers = {
+  ask: handleAskCommand,
   agent: handleAgentCommand,
   join: handleJoinCommand,
   leave: handleLeaveCommand,
@@ -85,6 +89,7 @@ const defaultInteractionCommandHandlers: InteractionCommandHandlers = {
 };
 
 const defaultInteractionAutocompleteHandlers: InteractionAutocompleteHandlers = {
+  ask: handleAskAutocomplete,
   agent: handleAgentAutocomplete,
   model: handleModelAutocomplete,
 };
@@ -94,6 +99,8 @@ function resolveInteractionCommandHandler(
   commandHandlers: InteractionCommandHandlers
 ): InteractionCommandHandler | null {
   switch (commandName) {
+    case 'ask':
+      return commandHandlers.ask;
     case 'agent':
       return commandHandlers.agent;
     case 'join':
@@ -112,6 +119,8 @@ function resolveInteractionAutocompleteHandler(
   autocompleteHandlers: InteractionAutocompleteHandlers
 ): InteractionAutocompleteHandler | null {
   switch (commandName) {
+    case 'ask':
+      return autocompleteHandlers.ask;
     case 'agent':
       return autocompleteHandlers.agent;
     case 'model':

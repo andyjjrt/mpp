@@ -29,6 +29,22 @@ const commands = [
     .addStringOption((opt) =>
       opt.setName('name').setDescription('Agent name').setAutocomplete(true).setRequired(false)
     ),
+  new SlashCommandBuilder()
+    .setName('ask')
+    .setDescription('Start an AI conversation in a new thread')
+    .addStringOption((opt) =>
+      opt.setName('prompt').setDescription('Your message to the AI').setRequired(true)
+    )
+    .addStringOption((opt) =>
+      opt.setName('agent').setDescription('Agent name').setAutocomplete(true).setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName('model')
+        .setDescription('Model in provider/model format')
+        .setAutocomplete(true)
+        .setRequired(false)
+    ),
 ].map((command) => command.toJSON());
 
 function resolveGuildId(guildId: string | undefined): string {
